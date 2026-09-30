@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
-	"github.com/tanjed/bus2/authz/internal/bundle"
 	"github.com/tanjed/bus2/authz/internal/config"
 )
 
@@ -22,7 +21,7 @@ type Params struct {
 	Cfg      config.Config
 	Admin    authzv1.AdminServiceServer
 	Internal authzv1.InternalServiceServer
-	Bundles  *bundle.Server
+	Bundles  http.Handler // OPA's bundle endpoint
 	Pool     *pgxpool.Pool
 	Log      *slog.Logger
 }

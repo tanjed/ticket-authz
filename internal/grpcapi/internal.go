@@ -8,13 +8,12 @@ import (
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
-	"github.com/tanjed/bus2/authz/internal/rbac"
 )
 
 // Internal implements InternalService: seed Jobs, the IdP and platform operations.
 type Internal struct {
 	authzv1.UnimplementedInternalServiceServer
-	Svc *rbac.Service
+	Svc InternalBackend
 	Log *slog.Logger
 }
 

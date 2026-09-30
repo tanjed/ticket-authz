@@ -6,4 +6,7 @@ import (
 	"github.com/tanjed/bus2/authz/internal/config"
 )
 
-var Module = fx.Module("idp", fx.Provide(func(cfg config.Config) Client { return New(cfg.IdPInternalURL) }))
+// Module provides the IdP client as Client.
+var Module = fx.Module("idp", fx.Provide(
+	fx.Annotate(func(cfg config.Config) *HTTP { return New(cfg.IdPInternalURL) }, fx.As(new(Client))),
+))

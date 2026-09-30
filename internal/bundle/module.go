@@ -3,6 +3,7 @@ package bundle
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,15 +14,23 @@ import (
 	"github.com/tanjed/bus2/authz/policy"
 )
 
-// Module provides the bundle Server and runs the Postgres listener that wakes its long polls.
+// Tag is the name the bundle endpoint (an http.Handler) is provided under.
+const Tag = `name:"bundles"`
+
+// Module provides the bundle endpoint as an http.Handler tagged bundles, reading from the domain
+// as a Source, and runs the Postgres listener that wakes its long polls.
 var Module = fx.Module("bundle",
-	fx.Provide(NewHub, provideServer),
+	fx.Provide(
+		NewHub,
+		fx.Annotate(func(s *rbac.Service) *rbac.Service { return s }, fx.As(new(Source))),
+		fx.Annotate(provideServer, fx.As(new(http.Handler)), fx.ResultTags(Tag)),
+	),
 	fx.Invoke(listenOnStart),
 )
 
-func provideServer(cfg config.Config, svc *rbac.Service, hub *Hub, log *slog.Logger) *Server {
+func provideServer(cfg config.Config, src Source, hub *Hub, log *slog.Logger) *Server {
 	return &Server{
-		Src:       svc,
+		Src:       src,
 		Hub:       hub,
 		Discovery: Discovery{Service: cfg.BundleService, LongPollSeconds: cfg.LongPollSeconds},
 		Policies:  []Policy{{Path: "authz.rego", Source: policy.Rego}},

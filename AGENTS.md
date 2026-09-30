@@ -15,7 +15,7 @@ Authorization service for Bus 2.0: permission catalogue, company roles and membe
 
 ## Stack
 
-uber **fx** for DI: each package owns a `var Module = fx.Module(...)` in its `module.go` (its providers and lifecycle hooks); `internal/ioc` only lists the modules and returns the `*fx.App`. Add a dependency in its package's module, then include the module in `ioc` if it is new. The list order is the start order: migrations (`db`), own manifest (`rbac`), bundle listener, listeners (`server`, last), **chi** for HTTP routing, **proto** as the API source of truth (gRPC + grpc-gateway REST from the same implementation), pgx, goose.
+uber **fx** for DI: each package owns a `var Module = fx.Module(...)` in its `module.go` (its providers and lifecycle hooks); `internal/ioc` only lists the modules and returns the `*fx.App`. Add a dependency in its package's module, then include the module in `ioc` if it is new. **Type safety:** every implementation carries a compile-time assertion (`var _ Iface = (*Impl)(nil)`), modules provide implementations as their interface (`fx.As`), and consumers depend on the narrowest interface they need (`grpcapi.AdminBackend`, `bundle.Source`, `idp.Client`, `events.Publisher`); a same-typed dependency is told apart by a tag (`bundle.Tag`). The list order is the start order: migrations (`db`), own manifest (`rbac`), bundle listener, listeners (`server`, last), **chi** for HTTP routing, **proto** as the API source of truth (gRPC + grpc-gateway REST from the same implementation), pgx, goose.
 
 ## Invariants (do not break)
 

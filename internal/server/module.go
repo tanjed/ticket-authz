@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
@@ -14,12 +15,12 @@ import (
 
 // Module runs the four listeners; include it last, so they open after everything else started.
 var Module = fx.Module("server",
-	fx.Provide(provideServers),
+	fx.Provide(fx.Annotate(provideServers, fx.ParamTags(``, ``, ``, bundle.Tag))),
 	fx.Invoke(runOnStart),
 )
 
 func provideServers(cfg config.Config, admin authzv1.AdminServiceServer, internal authzv1.InternalServiceServer,
-	bundles *bundle.Server, pool *pgxpool.Pool, log *slog.Logger) (*Servers, error) {
+	bundles http.Handler, pool *pgxpool.Pool, log *slog.Logger) (*Servers, error) {
 	return New(Params{Cfg: cfg, Admin: admin, Internal: internal, Bundles: bundles, Pool: pool, Log: log})
 }
 

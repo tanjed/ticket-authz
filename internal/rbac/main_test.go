@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tanjed/bus2/authz/internal/catalogue"
+	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 	"github.com/tanjed/bus2/authz/internal/testdb"
@@ -76,6 +77,11 @@ func (f *fakeIdP) SendInvitation(_ context.Context, inv idp.Invitation) error {
 	f.sent = append(f.sent, inv)
 	return nil
 }
+
+var (
+	_ events.Publisher = (*fakeEvents)(nil)
+	_ idp.Client       = (*fakeIdP)(nil)
+)
 
 type env struct {
 	svc *rbac.Service

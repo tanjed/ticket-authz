@@ -26,6 +26,8 @@ type Invitation struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
+var _ Client = (*HTTP)(nil)
+
 type HTTP struct {
 	BaseURL string
 	HTTP    *http.Client

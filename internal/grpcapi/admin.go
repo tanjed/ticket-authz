@@ -13,7 +13,7 @@ import (
 // Admin implements AdminService: the company admin API behind the gateway.
 type Admin struct {
 	authzv1.UnimplementedAdminServiceServer
-	Svc *rbac.Service
+	Svc AdminBackend
 	Log *slog.Logger
 }
 

@@ -47,6 +47,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+var _ idp.Client = noIdP{}
+
 type noIdP struct{}
 
 func (noIdP) IdentityByPhone(context.Context, string) (string, error) { return "", nil }

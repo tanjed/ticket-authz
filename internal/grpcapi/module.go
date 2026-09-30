@@ -1,20 +1,16 @@
 package grpcapi
 
 import (
-	"log/slog"
-
 	"go.uber.org/fx"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 )
 
-// Module provides the proto service implementations.
+// Module binds the domain to the backends it needs, and provides the implementations as the
+// generated service interfaces (consumers never see the concrete types).
 var Module = fx.Module("grpcapi", fx.Provide(
-	func(svc *rbac.Service, log *slog.Logger) authzv1.AdminServiceServer {
-		return &Admin{Svc: svc, Log: log}
-	},
-	func(svc *rbac.Service, log *slog.Logger) authzv1.InternalServiceServer {
-		return &Internal{Svc: svc, Log: log}
-	},
+	fx.Annotate(func(s *rbac.Service) *rbac.Service { return s }, fx.As(new(AdminBackend)), fx.As(new(InternalBackend))),
+	fx.Annotate(NewAdmin, fx.As(new(authzv1.AdminServiceServer))),
+	fx.Annotate(NewInternal, fx.As(new(authzv1.InternalServiceServer))),
 ))

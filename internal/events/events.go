@@ -29,6 +29,11 @@ type Publisher interface {
 	Publish(ctx context.Context, event, companyID string, data map[string]any)
 }
 
+var (
+	_ Publisher = (*Kafka)(nil)
+	_ Publisher = Log{}
+)
+
 type envelope struct {
 	ID         string         `json:"id"`
 	Event      string         `json:"event"`

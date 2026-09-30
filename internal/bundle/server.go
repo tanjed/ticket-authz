@@ -23,6 +23,11 @@ type Source interface {
 	BundleSnapshot(ctx context.Context, name string) (rbac.Snapshot, bool, error)
 }
 
+var (
+	_ Source       = (*rbac.Service)(nil)
+	_ http.Handler = (*Server)(nil)
+)
+
 // Server answers GET /bundles/{name}.tar.gz, with ETag and long polling (Prefer: wait=N).
 type Server struct {
 	Src       Source
