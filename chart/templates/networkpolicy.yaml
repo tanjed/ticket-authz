@@ -1,0 +1,24 @@
+# Public ports (REST 8080, gRPC 9090): only the gateway (it sets the X-Bus-* headers / metadata
+# the admin API trusts). Internal ports (REST 8081, gRPC 9091): in-cluster callers (IdP, seed
+# Jobs, OPA sidecars). Egress is not restricted.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authz
+  labels: {{- include "authz.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "authz.selector" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {{- toYaml .Values.networkPolicy.gateway.namespaceSelector | nindent 12 }}
+          podSelector: {{- toYaml .Values.networkPolicy.gateway.podSelector | nindent 12 }}
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 9090 }
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: TCP, port: 8081 }
+        - { protocol: TCP, port: 9091 }

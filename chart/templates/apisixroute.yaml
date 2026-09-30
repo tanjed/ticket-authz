@@ -1,0 +1,38 @@
+{{- if .Values.apisixRoute.enabled }}
+# The admin API under api.<domain>/authz. Each rule's name is the route name OPA looks up in the
+# catalogue (manifest/authz.json). Authorization is the gateway's global opa rule; nothing here.
+# SPIKE (see ../APISIX spec): confirm the route name the ingress controller generates from this.
+{{- $rules := list
+  (list "authz.permissions.list" "GET" "/authz/v1/permissions")
+  (list "authz.roles.list" "GET" "/authz/v1/roles")
+  (list "authz.roles.get" "GET" "/authz/v1/roles/*")
+  (list "authz.roles.create" "POST" "/authz/v1/roles")
+  (list "authz.roles.update" "PUT" "/authz/v1/roles/*")
+  (list "authz.roles.delete" "DELETE" "/authz/v1/roles/*")
+  (list "authz.members.list" "GET" "/authz/v1/members")
+  (list "authz.members.roles" "PUT" "/authz/v1/members/*")
+  (list "authz.members.remove" "DELETE" "/authz/v1/members/*")
+  (list "authz.invitations.list" "GET" "/authz/v1/invitations")
+  (list "authz.invitations.create" "POST" "/authz/v1/invitations") }}
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: authz
+  labels: {{- include "authz.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.apisixRoute.ingressClassName }}
+  http:
+    {{- range $rules }}
+    - name: {{ index . 0 }}
+      match:
+        hosts: ["api.{{ include "authz.domain" $ }}"]
+        methods: [{{ index . 1 }}]
+        paths: [{{ index . 2 | quote }}]
+      backends:
+        - { serviceName: authz, servicePort: 8080 }
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config: { regex_uri: ["^/authz/(.*)", "/$1"] }
+    {{- end }}
+{{- end }}

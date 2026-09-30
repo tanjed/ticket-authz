@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package bus.authz.v1;
+
+import "bus/authz/v1/types.proto";
+import "google/api/annotations.proto";
+
+option go_package = "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1";
+
+// InternalService is for callers inside the cluster: services' seed Jobs, the IdP, platform
+// operations. Served on the internal listeners (REST :8081, gRPC :9091), which the gateway never
+// routes. It has no authentication: the network is the boundary.
+service InternalService {
+  // Replaces a service's permissions and APISIX route map. Entries it no longer lists are
+  // deprecated (denied by the gateway), never deleted; listing them again restores them.
+  rpc ApplyManifest(ApplyManifestRequest) returns (ApplyManifestResponse) {
+    option (google.api.http) = {
+      put: "/internal/v1/manifests/{service}"
+      body: "*"
+    };
+  }
+  // A provider's company and roles, for the access token. NOT_FOUND: in no company.
+  // PERMISSION_DENIED: the company is suspended.
+  rpc GetClaims(GetClaimsRequest) returns (GetClaimsResponse) {
+    option (google.api.http) = {get: "/internal/v1/subjects/{sub}/claims"};
+  }
+  // Registers a company with its protected admin role held by admin_sub. Idempotent per subject:
+  // if admin_sub already belongs to a company, that company is returned (created = false).
+  rpc CreateCompany(CreateCompanyRequest) returns (CreateCompanyResponse) {
+    option (google.api.http) = {
+      post: "/internal/v1/companies"
+      body: "*"
+    };
+  }
+  rpc SetCompanyStatus(SetCompanyStatusRequest) returns (SetCompanyStatusResponse) {
+    option (google.api.http) = {
+      put: "/internal/v1/companies/{company_id}/status"
+      body: "*"
+    };
+  }
+  // For the IdP's invite page.
+  rpc GetInvitation(GetInvitationRequest) returns (GetInvitationResponse) {
+    option (google.api.http) = {get: "/internal/v1/invitations/{id}"};
+  }
+  // Makes sub a member with the invited roles. ALREADY_EXISTS: used already, or sub belongs to a
+  // company. FAILED_PRECONDITION: expired.
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse) {
+    option (google.api.http) = {
+      post: "/internal/v1/invitations/{id}/accept"
+      body: "*"
+    };
+  }
+}
+
+message ManifestPermission {
+  // resource:action, lowercase, no API version.
+  string key = 1;
+  string description = 2;
+  // In the consumer permission set.
+  bool consumer = 3;
+}
+
+message ManifestRoute {
+  // The APISIX route name (what the gateway's opa plugin sends).
+  string name = 1;
+  // One of the manifest's permissions; empty when public.
+  string permission = 2;
+  bool public = 3;
+}
+
+message ApplyManifestRequest {
+  string service = 1;
+  repeated ManifestPermission permissions = 2;
+  repeated ManifestRoute routes = 3;
+}
+
+message ApplyManifestResponse {
+  string service = 1;
+  int32 permissions = 2;
+  int32 routes = 3;
+  // False when the manifest matched what was stored (the bundles did not change).
+  bool changed = 4;
+}
+
+message GetClaimsRequest {
+  string sub = 1;
+}
+
+message CreateCompanyRequest {
+  string name = 1;
+  string admin_sub = 2;
+}
+
+message CreateCompanyResponse {
+  string company_id = 1;
+  bool created = 2;
+}
+
+message SetCompanyStatusRequest {
+  string company_id = 1;
+  CompanyStatus status = 2;
+}
+
+message GetInvitationRequest {
+  string id = 1;
+}
+
+message AcceptInvitationRequest {
+  string id = 1;
+  string sub = 2;
+}
+
+message GetClaimsResponse {
+  string company_id = 1;
+  repeated RoleRef roles = 2;
+}
+
+message SetCompanyStatusResponse {}
+
+message GetInvitationResponse {
+  Invitation invitation = 1;
+}
+
+message AcceptInvitationResponse {}

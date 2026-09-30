@@ -1,0 +1,5 @@
+domain: bus.example
+replicas: 3
+image: { repository: registry.bus.example/authz, tag: "0.1.0" }   # PLACEHOLDER: the image built from this repo
+kafka:
+  brokers: kafka.bus.example:9092                                # PLACEHOLDER: this environment's Kafka

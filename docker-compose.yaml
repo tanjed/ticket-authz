@@ -1,0 +1,50 @@
+# Local Authz and its Postgres (Authz applies its migrations on start). Runs on the external `shohoz` network
+# with ../IdP (Kafka idp-kafka, the UI idp-ui) and ../APISIX (OPA polls authz:8081 for bundles).
+#   docker compose up -d --build
+# Ports on loopback only: public REST 8090 / gRPC 9090 (normally reached through APISIX),
+# internal REST 8091 / gRPC 9091.
+name: bus-authz
+
+services:
+  authz-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: authz
+      POSTGRES_PASSWORD: authz
+      POSTGRES_DB: authz
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports: ["127.0.0.1:5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authz -d authz"]
+      interval: 2s
+      retries: 30
+
+  # One-shot: creates authz.events on the IdP's Kafka (the IdP stack must be up for events).
+  authz-kafka-init:
+    image: redpandadata/redpanda:v24.3.1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - rpk topic create authz.events -X brokers=idp-kafka:9092 || echo "authz.events not created (is ../IdP up?)"
+    restart: "no"
+
+  authz:
+    build: .
+    depends_on:
+      authz-postgres: { condition: service_healthy }
+    environment:
+      AUTHZ_DATABASE_URL: postgres://authz:authz@authz-postgres:5432/authz?sslmode=disable
+      AUTHZ_IDP_INTERNAL_URL: http://idp-ui:3001
+      AUTHZ_KAFKA_BROKERS: idp-kafka:9092
+      AUTHZ_LONG_POLL_SECONDS: "30"
+    ports: ["127.0.0.1:8090:8080", "127.0.0.1:9090:9090", "127.0.0.1:8091:8081", "127.0.0.1:9091:9091"]
+
+# Every service runs on the external `shohoz` network shared by the repos here (make network in
+# ../IdP). Names are prefixed (authz-*) because Docker DNS aliases them on that network.
+networks:
+  default:
+    name: shohoz
+    external: true
+
+volumes:
+  pgdata:

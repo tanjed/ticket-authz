@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package bus.authz.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1";
+
+// A catalogue entry: resource:action, seeded by the service that owns it.
+message Permission {
+  string key = 1;
+  string service = 2;
+  string description = 3;
+}
+
+// A company-owned set of permissions. The protected role (grants_all) is created with the company.
+message Role {
+  string id = 1;
+  string name = 2;
+  bool protected = 3;
+  // Every permission, including ones added to the catalogue later.
+  bool grants_all = 4;
+  // Bumped on every edit.
+  int32 version = 5;
+  repeated string permissions = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp update_time = 8;
+}
+
+// A role as it appears in a provider's access token.
+message RoleRef {
+  string id = 1;
+  string name = 2;
+  int32 version = 3;
+}
+
+message Member {
+  // The IdP identity id (the token's sub).
+  string sub = 1;
+  repeated string role_ids = 2;
+  google.protobuf.Timestamp create_time = 3;
+}
+
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_PENDING = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  INVITATION_STATUS_EXPIRED = 3;
+}
+
+message Invitation {
+  string id = 1;
+  string company_id = 2;
+  string company_name = 3;
+  // E.164.
+  string phone = 4;
+  repeated string role_ids = 5;
+  string invited_by = 6;
+  // Set once accepted.
+  optional string sub = 7;
+  google.protobuf.Timestamp expire_time = 8;
+  google.protobuf.Timestamp accept_time = 9;
+  google.protobuf.Timestamp create_time = 10;
+  InvitationStatus status = 11;
+}
+
+enum CompanyStatus {
+  COMPANY_STATUS_UNSPECIFIED = 0;
+  COMPANY_STATUS_ACTIVE = 1;
+  // Every request of the company's users is denied (within one bundle poll).
+  COMPANY_STATUS_SUSPENDED = 2;
+}

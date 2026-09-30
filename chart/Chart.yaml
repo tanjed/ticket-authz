@@ -1,0 +1,6 @@
+apiVersion: v2
+name: authz
+description: Bus 2.0 Authz. Permission catalogue, company roles and members; serves the OPA bundles the APISIX gateway decides every request from. Bundles its own Postgres.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

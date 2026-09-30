@@ -1,0 +1,43 @@
+# Public base domain: the admin API is served through the gateway at api.<domain>/authz. Set it in helmvars/.
+domain: ""
+
+image: { repository: "", tag: "" }   # no default: set them in helmvars/
+replicas: 2
+
+# Names of pre-created Secrets. This chart never creates secrets.
+secrets:
+  # keys: password, url (postgres://authz:<password>@<release>-postgres:5432/authz?sslmode=disable)
+  postgres: { name: authz-postgres }
+
+# The IdP UI's cluster-internal Service (invitations). Never its public host: the IdP refuses it.
+idpInternalUrl: http://idp-ui:3001
+
+# Domain events go to this topic. Kafka is not part of this chart.
+kafka:
+  brokers: ""   # host:port[,host:port]; empty: events are only logged
+  topic: authz.events
+
+# What discovery tells each OPA sidecar about long polling.
+longPollSeconds: 30
+
+# Who may reach which port (needs a CNI that enforces NetworkPolicy):
+#   public (8080, admin API, trusts X-Bus-* headers): only the APISIX gateway pods.
+#   internal (8081, IdP / seed Jobs / OPA bundles): any pod in the cluster; never the gateway's routes.
+networkPolicy:
+  gateway:
+    namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: apisix } }
+    podSelector: { matchLabels: { app.kubernetes.io/name: apisix } }
+
+# The admin API's routes. Names must match manifest/authz.json (the catalogue Authz seeds itself).
+apisixRoute:
+  enabled: true
+  ingressClassName: apisix
+
+resources: {}
+
+postgres:
+  image: postgres:16-alpine
+  storageSize: 2Gi
+  database: authz
+  username: authz
+  resources: {}

@@ -1,0 +1,49 @@
+# Authz applies its migrations on start (under a Postgres advisory lock, so replicas starting
+# together are safe), seeds its own manifest, then serves.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authz
+  labels: {{- include "authz.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels: {{- include "authz.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "authz.selector" . | nindent 8 }}
+    spec:
+      containers:
+        - name: authz
+          image: "{{ required "image.repository is required (see helmvars/)" .Values.image.repository }}:{{ required "image.tag is required (see helmvars/)" .Values.image.tag }}"
+          ports:
+            - { name: public, containerPort: 8080 }
+            - { name: public-grpc, containerPort: 9090 }
+            - { name: internal, containerPort: 8081 }
+            - { name: internal-grpc, containerPort: 9091 }
+          env:
+            - name: AUTHZ_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ .Values.secrets.postgres.name }}, key: url } }
+            - { name: AUTHZ_IDP_INTERNAL_URL, value: {{ .Values.idpInternalUrl | quote }} }
+            - { name: AUTHZ_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
+            - { name: AUTHZ_KAFKA_TOPIC, value: {{ .Values.kafka.topic | quote }} }
+            - { name: AUTHZ_LONG_POLL_SECONDS, value: {{ .Values.longPollSeconds | quote }} }
+          readinessProbe: { httpGet: { path: /healthz, port: internal } }
+          livenessProbe: { grpc: { port: 9091 }, initialDelaySeconds: 10 }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+---
+# One Service. REST and gRPC side by side: public 8080/9090 (gateway only), internal 8081/9091.
+# OPA's boot config, the IdP and seed Jobs use authz:8081 (or gRPC authz:9091).
+apiVersion: v1
+kind: Service
+metadata:
+  name: authz
+  labels: {{- include "authz.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "authz.selector" . | nindent 4 }}
+  ports:
+    - { name: public, port: 8080, targetPort: public }
+    - { name: public-grpc, port: 9090, targetPort: public-grpc, appProtocol: grpc }
+    - { name: internal, port: 8081, targetPort: internal }
+    - { name: internal-grpc, port: 9091, targetPort: internal-grpc, appProtocol: grpc }

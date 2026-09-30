@@ -1,0 +1,1016 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "bus/authz/v1/types.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "AdminService",
+      "description": "AdminService is the company admin API, served on the public listeners (REST :8080, gRPC :9090).\nOnly the APISIX gateway can reach them: it has verified the caller's token and the route's\npermission, and passes the caller as x-bus-subject, x-bus-company-id and x-bus-user-type\n(HTTP headers, or gRPC metadata). Every call is scoped to the caller's company and checked\nagainst the escalation rule: nobody hands out permissions they do not hold."
+    },
+    {
+      "name": "InternalService",
+      "description": "InternalService is for callers inside the cluster: services' seed Jobs, the IdP, platform\noperations. Served on the internal listeners (REST :8081, gRPC :9091), which the gateway never\nroutes. It has no authentication: the network is the boundary."
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/internal/v1/companies": {
+      "post": {
+        "summary": "Registers a company with its protected admin role held by admin_sub. Idempotent per subject:\nif admin_sub already belongs to a company, that company is returned (created = false).",
+        "operationId": "InternalService_CreateCompany",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateCompanyResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateCompanyRequest"
+            }
+          }
+        ],
+        "tags": [
+          "InternalService"
+        ]
+      }
+    },
+    "/internal/v1/companies/{company_id}/status": {
+      "put": {
+        "operationId": "InternalService_SetCompanyStatus",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SetCompanyStatusResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/InternalServiceSetCompanyStatusBody"
+            }
+          }
+        ],
+        "tags": [
+          "InternalService"
+        ]
+      }
+    },
+    "/internal/v1/invitations/{id}": {
+      "get": {
+        "summary": "For the IdP's invite page.",
+        "operationId": "InternalService_GetInvitation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetInvitationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "InternalService"
+        ]
+      }
+    },
+    "/internal/v1/invitations/{id}/accept": {
+      "post": {
+        "summary": "Makes sub a member with the invited roles. ALREADY_EXISTS: used already, or sub belongs to a\ncompany. FAILED_PRECONDITION: expired.",
+        "operationId": "InternalService_AcceptInvitation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AcceptInvitationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/InternalServiceAcceptInvitationBody"
+            }
+          }
+        ],
+        "tags": [
+          "InternalService"
+        ]
+      }
+    },
+    "/internal/v1/manifests/{service}": {
+      "put": {
+        "summary": "Replaces a service's permissions and APISIX route map. Entries it no longer lists are\ndeprecated (denied by the gateway), never deleted; listing them again restores them.",
+        "operationId": "InternalService_ApplyManifest",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ApplyManifestResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/InternalServiceApplyManifestBody"
+            }
+          }
+        ],
+        "tags": [
+          "InternalService"
+        ]
+      }
+    },
+    "/internal/v1/subjects/{sub}/claims": {
+      "get": {
+        "summary": "A provider's company and roles, for the access token. NOT_FOUND: in no company.\nPERMISSION_DENIED: the company is suspended.",
+        "operationId": "InternalService_GetClaims",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetClaimsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sub",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "InternalService"
+        ]
+      }
+    },
+    "/v1/invitations": {
+      "get": {
+        "operationId": "AdminService_ListInvitations",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListInvitationsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AdminService"
+        ]
+      },
+      "post": {
+        "summary": "Invites a phone number with roles; the IdP sends the link. Replaces a pending invitation for\nthe same number. Someone who already belongs to a company cannot be invited.",
+        "operationId": "AdminService_CreateInvitation",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateInvitationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateInvitationRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      }
+    },
+    "/v1/members": {
+      "get": {
+        "operationId": "AdminService_ListMembers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListMembersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AdminService"
+        ]
+      }
+    },
+    "/v1/members/{sub}": {
+      "delete": {
+        "operationId": "AdminService_RemoveMember",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RemoveMemberResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sub",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      }
+    },
+    "/v1/members/{sub}/roles": {
+      "put": {
+        "summary": "Replaces the member's roles. The company's last admin cannot lose the admin role.",
+        "operationId": "AdminService_SetMemberRoles",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SetMemberRolesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sub",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AdminServiceSetMemberRolesBody"
+            }
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      }
+    },
+    "/v1/permissions": {
+      "get": {
+        "summary": "The live permission catalogue: what roles can be built from.",
+        "operationId": "AdminService_ListPermissions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListPermissionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AdminService"
+        ]
+      }
+    },
+    "/v1/roles": {
+      "get": {
+        "operationId": "AdminService_ListRoles",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListRolesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "AdminService"
+        ]
+      },
+      "post": {
+        "operationId": "AdminService_CreateRole",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CreateRoleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateRoleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      }
+    },
+    "/v1/roles/{id}": {
+      "get": {
+        "operationId": "AdminService_GetRole",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetRoleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      },
+      "delete": {
+        "summary": "Refused while the role is assigned, and for the protected role.",
+        "operationId": "AdminService_DeleteRole",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DeleteRoleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      },
+      "put": {
+        "summary": "Replaces the name and permissions. The protected role cannot be changed.",
+        "operationId": "AdminService_UpdateRole",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1UpdateRoleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AdminServiceUpdateRoleBody"
+            }
+          }
+        ],
+        "tags": [
+          "AdminService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "AdminServiceSetMemberRolesBody": {
+      "type": "object",
+      "properties": {
+        "role_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "AdminServiceUpdateRoleBody": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "InternalServiceAcceptInvitationBody": {
+      "type": "object",
+      "properties": {
+        "sub": {
+          "type": "string"
+        }
+      }
+    },
+    "InternalServiceApplyManifestBody": {
+      "type": "object",
+      "properties": {
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ManifestPermission"
+          }
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ManifestRoute"
+          }
+        }
+      }
+    },
+    "InternalServiceSetCompanyStatusBody": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/v1CompanyStatus"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AcceptInvitationResponse": {
+      "type": "object"
+    },
+    "v1ApplyManifestResponse": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "routes": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "changed": {
+          "type": "boolean",
+          "description": "False when the manifest matched what was stored (the bundles did not change)."
+        }
+      }
+    },
+    "v1CompanyStatus": {
+      "type": "string",
+      "enum": [
+        "COMPANY_STATUS_UNSPECIFIED",
+        "COMPANY_STATUS_ACTIVE",
+        "COMPANY_STATUS_SUSPENDED"
+      ],
+      "default": "COMPANY_STATUS_UNSPECIFIED",
+      "description": " - COMPANY_STATUS_SUSPENDED: Every request of the company's users is denied (within one bundle poll)."
+    },
+    "v1CreateCompanyRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "admin_sub": {
+          "type": "string"
+        }
+      }
+    },
+    "v1CreateCompanyResponse": {
+      "type": "object",
+      "properties": {
+        "company_id": {
+          "type": "string"
+        },
+        "created": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1CreateInvitationRequest": {
+      "type": "object",
+      "properties": {
+        "phone": {
+          "type": "string",
+          "description": "E.164, e.g. +8801712345678."
+        },
+        "role_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1CreateInvitationResponse": {
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "$ref": "#/definitions/v1Invitation"
+        }
+      }
+    },
+    "v1CreateRoleRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1CreateRoleResponse": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/definitions/v1Role"
+        }
+      }
+    },
+    "v1DeleteRoleResponse": {
+      "type": "object"
+    },
+    "v1GetClaimsResponse": {
+      "type": "object",
+      "properties": {
+        "company_id": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RoleRef"
+          }
+        }
+      }
+    },
+    "v1GetInvitationResponse": {
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "$ref": "#/definitions/v1Invitation"
+        }
+      }
+    },
+    "v1GetRoleResponse": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/definitions/v1Role"
+        }
+      }
+    },
+    "v1Invitation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "company_id": {
+          "type": "string"
+        },
+        "company_name": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string",
+          "description": "E.164."
+        },
+        "role_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "invited_by": {
+          "type": "string"
+        },
+        "sub": {
+          "type": "string",
+          "description": "Set once accepted."
+        },
+        "expire_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "accept_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "create_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "$ref": "#/definitions/v1InvitationStatus"
+        }
+      }
+    },
+    "v1InvitationStatus": {
+      "type": "string",
+      "enum": [
+        "INVITATION_STATUS_UNSPECIFIED",
+        "INVITATION_STATUS_PENDING",
+        "INVITATION_STATUS_ACCEPTED",
+        "INVITATION_STATUS_EXPIRED"
+      ],
+      "default": "INVITATION_STATUS_UNSPECIFIED"
+    },
+    "v1ListInvitationsResponse": {
+      "type": "object",
+      "properties": {
+        "invitations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Invitation"
+          }
+        }
+      }
+    },
+    "v1ListMembersResponse": {
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Member"
+          }
+        }
+      }
+    },
+    "v1ListPermissionsResponse": {
+      "type": "object",
+      "properties": {
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Permission"
+          }
+        }
+      }
+    },
+    "v1ListRolesResponse": {
+      "type": "object",
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Role"
+          }
+        }
+      }
+    },
+    "v1ManifestPermission": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "resource:action, lowercase, no API version."
+        },
+        "description": {
+          "type": "string"
+        },
+        "consumer": {
+          "type": "boolean",
+          "description": "In the consumer permission set."
+        }
+      }
+    },
+    "v1ManifestRoute": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The APISIX route name (what the gateway's opa plugin sends)."
+        },
+        "permission": {
+          "type": "string",
+          "description": "One of the manifest's permissions; empty when public."
+        },
+        "public": {
+          "type": "boolean"
+        }
+      }
+    },
+    "v1Member": {
+      "type": "object",
+      "properties": {
+        "sub": {
+          "type": "string",
+          "description": "The IdP identity id (the token's sub)."
+        },
+        "role_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "create_time": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1Permission": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "description": "A catalogue entry: resource:action, seeded by the service that owns it."
+    },
+    "v1RemoveMemberResponse": {
+      "type": "object"
+    },
+    "v1Role": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "protected": {
+          "type": "boolean"
+        },
+        "grants_all": {
+          "type": "boolean",
+          "description": "Every permission, including ones added to the catalogue later."
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Bumped on every edit."
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "create_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "update_time": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "A company-owned set of permissions. The protected role (grants_all) is created with the company."
+    },
+    "v1RoleRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "A role as it appears in a provider's access token."
+    },
+    "v1SetCompanyStatusResponse": {
+      "type": "object"
+    },
+    "v1SetMemberRolesResponse": {
+      "type": "object"
+    },
+    "v1UpdateRoleResponse": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/definitions/v1Role"
+        }
+      }
+    }
+  }
+}

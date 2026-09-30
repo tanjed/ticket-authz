@@ -1,0 +1,5 @@
+chart/charts/
+*.tgz
+.DS_Store
+/authz
+/bin/
