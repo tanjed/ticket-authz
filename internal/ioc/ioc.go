@@ -12,7 +12,7 @@ import (
 	"github.com/tanjed/bus2/authz/internal/config"
 	"github.com/tanjed/bus2/authz/internal/db"
 	"github.com/tanjed/bus2/authz/internal/events"
-	"github.com/tanjed/bus2/authz/internal/grpcapi"
+	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/logging"
 	"github.com/tanjed/bus2/authz/internal/rbac"
@@ -28,7 +28,7 @@ var Modules = fx.Options(
 	idp.Module,
 	rbac.Module,
 	bundle.Module,
-	grpcapi.Module,
+	rpcapi.Module,
 	server.Module,
 )
 

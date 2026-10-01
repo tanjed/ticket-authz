@@ -1,4 +1,4 @@
-package grpcapi
+package rpcapi
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
+	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 )
 
 // Admin implements AdminService: the company admin API behind the gateway.
 type Admin struct {
-	authzv1.UnimplementedAdminServiceServer
+	authzv1connect.UnimplementedAdminServiceHandler
 	Svc AdminBackend
 	Log *slog.Logger
 }
@@ -23,7 +24,7 @@ func (a *Admin) ListPermissions(ctx context.Context, _ *authzv1.ListPermissionsR
 	}
 	list, err := a.Svc.Permissions(ctx)
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	out := &authzv1.ListPermissionsResponse{}
 	for _, p := range list {
@@ -39,7 +40,7 @@ func (a *Admin) ListRoles(ctx context.Context, _ *authzv1.ListRolesRequest) (*au
 	}
 	roles, err := a.Svc.ListRoles(ctx, c)
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	out := &authzv1.ListRolesResponse{}
 	for _, r := range roles {
@@ -55,7 +56,7 @@ func (a *Admin) GetRole(ctx context.Context, req *authzv1.GetRoleRequest) (*auth
 	}
 	r, err := a.Svc.GetRole(ctx, c, req.GetId())
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.GetRoleResponse{Role: rolePB(r)}, nil
 }
@@ -67,7 +68,7 @@ func (a *Admin) CreateRole(ctx context.Context, req *authzv1.CreateRoleRequest) 
 	}
 	r, err := a.Svc.CreateRole(ctx, c, rbac.RoleInput{Name: req.GetName(), Permissions: req.GetPermissions()})
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.CreateRoleResponse{Role: rolePB(r)}, nil
 }
@@ -79,7 +80,7 @@ func (a *Admin) UpdateRole(ctx context.Context, req *authzv1.UpdateRoleRequest) 
 	}
 	r, err := a.Svc.UpdateRole(ctx, c, req.GetId(), rbac.RoleInput{Name: req.GetName(), Permissions: req.GetPermissions()})
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.UpdateRoleResponse{Role: rolePB(r)}, nil
 }
@@ -90,7 +91,7 @@ func (a *Admin) DeleteRole(ctx context.Context, req *authzv1.DeleteRoleRequest) 
 		return nil, err
 	}
 	if err := a.Svc.DeleteRole(ctx, c, req.GetId()); err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.DeleteRoleResponse{}, nil
 }
@@ -102,7 +103,7 @@ func (a *Admin) ListMembers(ctx context.Context, _ *authzv1.ListMembersRequest) 
 	}
 	members, err := a.Svc.ListMembers(ctx, c)
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	out := &authzv1.ListMembersResponse{}
 	for _, m := range members {
@@ -117,7 +118,7 @@ func (a *Admin) SetMemberRoles(ctx context.Context, req *authzv1.SetMemberRolesR
 		return nil, err
 	}
 	if err := a.Svc.SetMemberRoles(ctx, c, req.GetSub(), req.GetRoleIds()); err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.SetMemberRolesResponse{}, nil
 }
@@ -128,7 +129,7 @@ func (a *Admin) RemoveMember(ctx context.Context, req *authzv1.RemoveMemberReque
 		return nil, err
 	}
 	if err := a.Svc.RemoveMember(ctx, c, req.GetSub()); err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.RemoveMemberResponse{}, nil
 }
@@ -140,7 +141,7 @@ func (a *Admin) ListInvitations(ctx context.Context, _ *authzv1.ListInvitationsR
 	}
 	list, err := a.Svc.ListInvitations(ctx, c)
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	out := &authzv1.ListInvitationsResponse{}
 	for _, i := range list {
@@ -156,7 +157,7 @@ func (a *Admin) CreateInvitation(ctx context.Context, req *authzv1.CreateInvitat
 	}
 	inv, err := a.Svc.CreateInvitation(ctx, c, rbac.InvitationInput{Phone: req.GetPhone(), RoleIDs: req.GetRoleIds()})
 	if err != nil {
-		return nil, toStatus(a.Log, err)
+		return nil, toError(a.Log, err)
 	}
 	return &authzv1.CreateInvitationResponse{Invitation: invitationPB(inv)}, nil
 }

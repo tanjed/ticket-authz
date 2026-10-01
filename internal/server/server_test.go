@@ -2,11 +2,14 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,19 +17,16 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+	"connectrpc.com/grpchealth"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
+	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/bundle"
 	"github.com/tanjed/bus2/authz/internal/events"
-	"github.com/tanjed/bus2/authz/internal/grpcapi"
+	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 	"github.com/tanjed/bus2/authz/internal/testdb"
@@ -55,36 +55,46 @@ func (noIdP) IdentityByPhone(context.Context, string) (string, error) { return "
 func (noIdP) SendInvitation(context.Context, idp.Invitation) error    { return nil }
 
 type stack struct {
-	h                        handlers
-	publicGRPC, internalGRPC *grpc.ClientConn
+	h handlers
+	// The handlers on real sockets, cleartext HTTP/2 (gRPC needs it), and a client that speaks it.
+	publicURL, internalURL string
+	client                 *http.Client
 }
 
-// newStack builds the real handlers over a fresh database, gRPC on in-memory listeners.
+// newStack builds the real handlers over a fresh database and serves them on local sockets.
 func newStack(t *testing.T) stack {
 	t.Helper()
 	testdb.Reset(t, pool)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, time.Hour)
 	h, err := build(Params{
-		Admin:    &grpcapi.Admin{Svc: svc, Log: log},
-		Internal: &grpcapi.Internal{Svc: svc, Log: log},
-		Bundles:  &bundle.Server{Src: svc, Hub: bundle.NewHub(), MaxWait: time.Second, Log: log},
+		Admin:    &rpcapi.Admin{Svc: svc, Log: log},
+		Internal: &rpcapi.Internal{Svc: svc, Log: log},
+		Bundles:  &bundle.Server{Src: svc, Hub: bundle.NewHub(), Signer: testSigner(t), MaxWait: time.Second, Log: log},
 		Pool:     pool,
 		Log:      log,
 	})
 	require.NoError(t, err)
-	dial := func(s *grpc.Server) *grpc.ClientConn {
-		lis := bufconn.Listen(1 << 20)
-		go func() { _ = s.Serve(lis) }()
-		t.Cleanup(s.Stop)
-		conn, err := grpc.NewClient("passthrough:///bufnet",
-			grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
-			grpc.WithTransportCredentials(insecure.NewCredentials()))
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = conn.Close() })
-		return conn
+	serve := func(h http.Handler) string {
+		srv := httptest.NewUnstartedServer(h)
+		srv.Config = newHTTPServer(h, 0)
+		srv.Start()
+		t.Cleanup(srv.Close)
+		return srv.URL
 	}
-	return stack{h: h, publicGRPC: dial(h.publicGRPC), internalGRPC: dial(h.internalGRPC)}
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	return stack{h: h, publicURL: serve(h.public), internalURL: serve(h.internal),
+		client: &http.Client{Transport: &http.Transport{Protocols: protocols}}}
+}
+
+func testSigner(t *testing.T) *bundle.Signer {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	s, err := bundle.NewSigner(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), "test")
+	require.NoError(t, err)
+	return s
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string, headers map[string]string) (int, map[string]any) {
@@ -109,49 +119,49 @@ const manifest = `{
 
 func TestREST_InternalFlow(t *testing.T) {
 	s := newStack(t)
-	code, body := do(t, s.h.internalHTTP, "PUT", "/internal/v1/manifests/order", manifest, nil)
+	code, body := do(t, s.h.internal, "PUT", "/internal/v1/manifests/order", manifest, nil)
 	require.Equal(t, http.StatusOK, code, body)
 	require.Equal(t, map[string]any{"service": "order", "permissions": float64(2), "routes": float64(2), "changed": true}, body,
 		"snake_case JSON, empty fields emitted")
 
-	code, body = do(t, s.h.internalHTTP, "PUT", "/internal/v1/manifests/order", `{"permissions": [{"key": "a:b", "consumers": true}]}`, nil)
+	code, body = do(t, s.h.internal, "PUT", "/internal/v1/manifests/order", `{"permissions": [{"key": "a:b", "consumers": true}]}`, nil)
 	require.Equal(t, http.StatusBadRequest, code, "unknown fields are refused")
 	require.Equal(t, "invalid_argument", body["error"])
 
-	code, body = do(t, s.h.internalHTTP, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
+	code, body = do(t, s.h.internal, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
 	require.Equal(t, http.StatusOK, code, body)
 	require.Equal(t, true, body["created"])
 
-	code, body = do(t, s.h.internalHTTP, "GET", "/internal/v1/subjects/u1/claims", "", nil)
+	code, body = do(t, s.h.internal, "GET", "/internal/v1/subjects/u1/claims", "", nil)
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, body["company_id"], body["company_id"])
 	require.Len(t, body["roles"], 1)
 
-	code, body = do(t, s.h.internalHTTP, "GET", "/internal/v1/subjects/nobody/claims", "", nil)
+	code, body = do(t, s.h.internal, "GET", "/internal/v1/subjects/nobody/claims", "", nil)
 	require.Equal(t, http.StatusNotFound, code)
 	require.Equal(t, "not_a_member", body["error"], "the domain reason survives to REST")
 
-	code, _ = do(t, s.h.internalHTTP, "GET", "/healthz", "", nil)
+	code, _ = do(t, s.h.internal, "GET", "/healthz", "", nil)
 	require.Equal(t, http.StatusOK, code)
-	code, _ = do(t, s.h.internalHTTP, "GET", "/bundles/catalogue.tar.gz", "", nil)
+	code, _ = do(t, s.h.internal, "GET", "/bundles/catalogue.tar.gz", "", nil)
 	require.Equal(t, http.StatusOK, code)
-	code, _ = do(t, s.h.internalHTTP, "GET", "/v1/roles", "", nil)
+	code, _ = do(t, s.h.internal, "GET", "/v1/roles", "", nil)
 	require.Equal(t, http.StatusNotFound, code, "the admin API is not on the internal listener")
 }
 
 func TestREST_AdminAPI(t *testing.T) {
 	s := newStack(t)
-	do(t, s.h.internalHTTP, "PUT", "/internal/v1/manifests/order", manifest, nil)
-	_, body := do(t, s.h.internalHTTP, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
+	do(t, s.h.internal, "PUT", "/internal/v1/manifests/order", manifest, nil)
+	_, body := do(t, s.h.internal, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
 	admin := map[string]string{"X-Bus-Subject": "u1", "X-Bus-Company-Id": body["company_id"].(string), "X-Bus-User-Type": "provider"}
 
-	code, body := do(t, s.h.publicHTTP, "POST", "/v1/roles", `{"name": "Clerk", "permissions": ["order:read"]}`, admin)
+	code, body := do(t, s.h.public, "POST", "/v1/roles", `{"name": "Clerk", "permissions": ["order:read"]}`, admin)
 	require.Equal(t, http.StatusOK, code, body)
 	role := body["role"].(map[string]any)
 	require.Equal(t, "Clerk", role["name"])
 	require.Equal(t, false, role["grants_all"])
 
-	code, body = do(t, s.h.publicHTTP, "GET", "/v1/roles", "", admin)
+	code, body = do(t, s.h.public, "GET", "/v1/roles", "", admin)
 	require.Equal(t, http.StatusOK, code)
 	require.Len(t, body["roles"], 2)
 	var protectedID string
@@ -160,24 +170,33 @@ func TestREST_AdminAPI(t *testing.T) {
 			protectedID = r.(map[string]any)["id"].(string)
 		}
 	}
-	code, body = do(t, s.h.publicHTTP, "PUT", "/v1/roles/"+protectedID, `{"name": "Boss"}`, admin)
+	code, body = do(t, s.h.public, "PUT", "/v1/roles/"+protectedID, `{"name": "Boss"}`, admin)
 	require.Equal(t, http.StatusBadRequest, code)
 	require.Equal(t, "protected_role", body["error"])
 
 	consumer := map[string]string{"X-Bus-Subject": "u1", "X-Bus-User-Type": "consumer"}
-	code, body = do(t, s.h.publicHTTP, "GET", "/v1/roles", "", consumer)
+	code, body = do(t, s.h.public, "GET", "/v1/roles", "", consumer)
 	require.Equal(t, http.StatusForbidden, code)
 	require.Equal(t, "provider_only", body["error"])
 
-	code, _ = do(t, s.h.publicHTTP, "PUT", "/internal/v1/manifests/order", manifest, nil)
+	code, _ = do(t, s.h.public, "PUT", "/internal/v1/manifests/order", manifest, nil)
 	require.Equal(t, http.StatusNotFound, code, "the internal API is not on the public listener")
+}
+
+// caller is a client context carrying the gateway's caller headers (gRPC metadata on the wire).
+func caller(ctx context.Context, kv ...string) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
+	for i := 0; i < len(kv); i += 2 {
+		info.RequestHeader().Add(kv[i], kv[i+1])
+	}
+	return ctx
 }
 
 func TestGRPC_BothServices(t *testing.T) {
 	s := newStack(t)
 	ctx := context.Background()
-	internal := authzv1.NewInternalServiceClient(s.internalGRPC)
-	admin := authzv1.NewAdminServiceClient(s.publicGRPC)
+	internal := authzv1connect.NewInternalServiceClient(s.client, s.internalURL, connect.WithGRPC())
+	admin := authzv1connect.NewAdminServiceClient(s.client, s.publicURL, connect.WithGRPC())
 
 	_, err := internal.ApplyManifest(ctx, &authzv1.ApplyManifestRequest{
 		Service:     "order",
@@ -189,21 +208,53 @@ func TestGRPC_BothServices(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = internal.GetClaims(ctx, &authzv1.GetClaimsRequest{Sub: "nobody"})
-	st := status.Convert(err)
-	require.Equal(t, codes.NotFound, st.Code())
-	require.Equal(t, "not_a_member", grpcapi.Reason(st))
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Equal(t, "not_a_member", rpcapi.Reason(err), "the domain reason survives to gRPC")
 
-	md := metadata.Pairs("x-bus-subject", "u1", "x-bus-company-id", co.GetCompanyId(), "x-bus-user-type", "provider")
-	roles, err := admin.ListRoles(metadata.NewOutgoingContext(ctx, md), &authzv1.ListRolesRequest{})
+	md := []string{"x-bus-subject", "u1", "x-bus-company-id", co.GetCompanyId(), "x-bus-user-type", "provider"}
+	roles, err := admin.ListRoles(caller(ctx, md...), &authzv1.ListRolesRequest{})
 	require.NoError(t, err)
 	require.Len(t, roles.GetRoles(), 1)
 	require.True(t, roles.GetRoles()[0].GetGrantsAll())
 
 	_, err = admin.ListRoles(ctx, &authzv1.ListRolesRequest{})
-	require.Equal(t, codes.PermissionDenied, status.Code(err), "no caller metadata")
+	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "no caller metadata")
 
 	// Two values for one key: trust neither.
-	md.Append("x-bus-company-id", "other")
-	_, err = admin.ListRoles(metadata.NewOutgoingContext(ctx, md), &authzv1.ListRolesRequest{})
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	_, err = admin.ListRoles(caller(ctx, append(md, "x-bus-company-id", "other")...), &authzv1.ListRolesRequest{})
+	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+	// Trust zones: neither service answers on the other's listener.
+	_, err = authzv1connect.NewAdminServiceClient(s.client, s.internalURL, connect.WithGRPC()).ListRoles(caller(ctx, md...), &authzv1.ListRolesRequest{})
+	require.Error(t, err, "the admin API is not on the internal listener")
+	_, err = authzv1connect.NewInternalServiceClient(s.client, s.publicURL, connect.WithGRPC()).GetClaims(ctx, &authzv1.GetClaimsRequest{Sub: "u1"})
+	require.Error(t, err, "the internal API is not on the public listener")
+}
+
+func TestConnect_JSONKeepsItsOwnErrors(t *testing.T) {
+	s := newStack(t)
+	// Connect protocol, JSON: what buf curl or a browser client sends.
+	connectJSON := map[string]string{"Content-Type": "application/json", "Connect-Protocol-Version": "1"}
+	code, body := do(t, s.h.internal, "POST", "/bus.authz.v1.InternalService/GetClaims", `{"sub": "nobody"}`, connectJSON)
+	require.Equal(t, http.StatusNotFound, code)
+	require.Equal(t, "not_found", body["code"], "a Connect error, not rewritten into the REST shape")
+	require.NotContains(t, body, "error")
+
+	code, _ = do(t, s.h.internal, "POST", "/bus.authz.v1.AdminService/ListRoles", `{}`, connectJSON)
+	require.Equal(t, http.StatusNotFound, code, "the admin API is not on the internal listener")
+
+	// Connect client, JSON codec: snake_case, as REST.
+	internal := authzv1connect.NewInternalServiceClient(s.client, s.internalURL, connect.WithProtoJSON())
+	res, err := internal.ApplyManifest(context.Background(), &authzv1.ApplyManifestRequest{Service: "order"})
+	require.NoError(t, err)
+	require.Equal(t, "order", res.GetService())
+}
+
+func TestHealth(t *testing.T) {
+	s := newStack(t)
+	for _, url := range []string{s.publicURL, s.internalURL} {
+		res, err := grpchealth.NewClient(s.client, url, connect.WithGRPC()).Check(context.Background(), &grpchealth.CheckRequest{})
+		require.NoError(t, err, url)
+		require.Equal(t, grpchealth.StatusServing, res.Status)
+	}
 }

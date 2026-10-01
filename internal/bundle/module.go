@@ -2,8 +2,10 @@ package bundle
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,16 +30,31 @@ var Module = fx.Module("bundle",
 	fx.Invoke(listenOnStart),
 )
 
-func provideServer(cfg config.Config, src Source, hub *Hub, log *slog.Logger) *Server {
+// provideServer fails the boot on an unreadable or invalid signing key, or a policy that does not
+// parse: either would leave every gateway refusing the bundles.
+func provideServer(cfg config.Config, src Source, hub *Hub, log *slog.Logger) (*Server, error) {
+	key, err := os.ReadFile(cfg.BundleSigningKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("bundle signing key: %w", err)
+	}
+	signer, err := NewSigner(key, cfg.BundleSigningKeyID)
+	if err != nil {
+		return nil, err
+	}
+	policies := []Policy{{Path: "authz.rego", Source: policy.Rego}}
+	if err := ParsePolicies(policies); err != nil {
+		return nil, err
+	}
 	return &Server{
 		Src:       src,
 		Hub:       hub,
 		Discovery: Discovery{Service: cfg.BundleService, LongPollSeconds: cfg.LongPollSeconds},
-		Policies:  []Policy{{Path: "authz.rego", Source: policy.Rego}},
+		Policies:  policies,
+		Signer:    signer,
 		// A little above what discovery asks OPA to wait, so OPA's own timeout ends the poll.
 		MaxWait: time.Duration(cfg.LongPollSeconds+5) * time.Second,
 		Log:     log,
-	}
+	}, nil
 }
 
 func listenOnStart(lc fx.Lifecycle, pool *pgxpool.Pool, hub *Hub, log *slog.Logger) {

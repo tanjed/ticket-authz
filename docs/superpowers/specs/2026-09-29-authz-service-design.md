@@ -82,14 +82,14 @@ Every role, member and invitation query is scoped by `company_id`.
 
 ## 6. APIs
 
-Defined in proto (`proto/bus/authz/v1`): `AdminService` and `InternalService`. Each is served over **gRPC and REST side by side**; REST is grpc-gateway registered in-process (it calls the same implementation, no loopback hop), driven by the `google.api.http` annotations. REST JSON uses the proto field names (snake_case), emits empty fields, and refuses unknown fields. Errors: the gRPC status carries an `ErrorInfo` whose reason is the domain code (e.g. `last_admin`); REST answers `{"error": <reason>, "message"}` with the standard gRPC-to-HTTP status mapping.
+Defined in proto (`proto/bus/authz/v1`): `AdminService` and `InternalService`, implemented as Connect handlers. Vanguard serves each as **Connect, gRPC, gRPC-Web and REST on one port** (HTTP/1.1 and h2c); REST is driven by the `google.api.http` annotations. REST JSON uses the proto field names (snake_case), emits empty fields, and refuses unknown fields. Errors: the Connect/gRPC error carries an `ErrorInfo` whose reason is the domain code (e.g. `last_admin`); REST answers `{"error": <reason>, "message"}` with the standard gRPC-to-HTTP status mapping. (Changed 2026-10-01 from grpc-go + grpc-gateway on four ports; see `2026-10-01-connect-vanguard-signed-bundles-design.md`.)
 
-Two trust zones, four listeners:
+Two trust zones, two listeners:
 
-| Zone | REST | gRPC | Reachable from | Serves |
-|---|---|---|---|---|
-| public | `:8080` | `:9090` | APISIX only (NetworkPolicy) | `AdminService`; trusts `X-Bus-*` headers / `x-bus-*` metadata |
-| internal | `:8081` | `:9091` | in-cluster, never routed by the gateway | `InternalService`, OPA bundles (`/bundles/*`, plain HTTP), `/healthz` |
+| Zone | Port | Reachable from | Serves |
+|---|---|---|---|
+| public | `:8080` | APISIX only (NetworkPolicy) | `AdminService`; trusts `X-Bus-*` headers |
+| internal | `:8081` | in-cluster, never routed by the gateway | `InternalService`, OPA bundles (`/bundles/*`, plain HTTP), `/healthz` |
 
 Domain errors map to gRPC codes: invalid input `INVALID_ARGUMENT`, not allowed `PERMISSION_DENIED`, not found `NOT_FOUND`, conflicts (name taken, already used, already a member, owned elsewhere) `ALREADY_EXISTS` (409), state rules (protected role, role in use, last admin, expired) `FAILED_PRECONDITION` (400), IdP down `UNAVAILABLE` (503). The status codes in the tables below are the REST view.
 
@@ -150,7 +150,7 @@ OPA's boot config names one service (`authz`, the internal listener) and enables
 
 - **Revision and ETag**: `bundle_revisions.revision` is the `.manifest` revision and the `ETag`. A write bumps the affected rows in its own transaction and issues `NOTIFY authz_bundles, '<name>'`, delivered on commit to every Authz replica.
 - **Long polling**: OPA sends `If-None-Match` and `Prefer: wait=<seconds>`. If the ETag is current, Authz holds the request until a notification for that bundle or the wait expires (then 304). Responses carry `Content-Type: application/vnd.openpolicyagent.bundles`, which OPA requires to keep long polling.
-- **Build**: on request, from one read-only repeatable-read transaction; cached in memory per `(name, revision)`.
+- **Build**: on request, from one read-only repeatable-read transaction; cached in memory per `(name, revision)`. Written with OPA's own bundle package and **signed** (RS256, `.signatures.json`); discovery tells OPA to verify every bundle (`signing.keyid`), and OPA's boot config holds the public key and verifies discovery itself.
 - What bumps what: a manifest bumps `catalogue` and `consumer`. Company creation bumps `discovery` and creates `companies/<id>`. Role, member or status changes bump `companies/<id>`.
 - Scale: every OPA loads every company (any gateway replica serves any company). Per-company bundles make a role edit rebuild and re-download one small bundle. Each OPA holds one long poll per bundle.
 
@@ -184,9 +184,9 @@ Authz publishes to its own topic, `authz.events`, with the IdP's envelope `{id, 
 
 ## 12. Build
 
-Go (module `github.com/tanjed/bus2/authz`). Dependency wiring with **uber fx** (each package owns its `fx.Module`; `internal/ioc` lists them and returns the app); on boot the service applies its migrations (goose, Postgres advisory lock), seeds its own manifest, then serves; routing with **chi**; APIs from **proto** (buf, protoc-gen-go, protoc-gen-go-grpc, grpc-gateway, openapiv2; pinned tools in `./bin` via `make tools`; generated code in `api/gen` and `api/openapi`, committed, `make check-generated` catches drift); pgx, goose, franz-go.
+Go (module `github.com/tanjed/bus2/authz`). Dependency wiring with **uber fx** (each package owns its `fx.Module`; `internal/ioc` lists them and returns the app); on boot the service applies its migrations (goose, Postgres advisory lock), seeds its own manifest, then serves; routing with **chi**; APIs from **proto** (buf, protoc-gen-go, protoc-gen-connect-go, openapiv2; served by connect-go and Vanguard; pinned tools in `./bin` via `make tools`; generated code in `api/gen` and `api/openapi`, committed, `make check-generated` catches drift); pgx, goose, franz-go.
 
-Packages: `config`, `db` (pool, migrations), `catalogue` (manifest validation), `rbac` (domain and SQL: catalogue, companies, roles, members, invitations, bundle snapshots; transport-neutral error kinds), `bundle` (tarballs, long-poll hub, Postgres listener), `grpcapi` (the proto service implementations, error and caller mapping), `server` (gateways, chi routers, gRPC servers, the four listeners), `idp` (IdP internal client), `events`, `logging`, `ioc` (assembles the modules), `testdb` (test Postgres). Policy and its tests live in `policy/`. Chart: Deployment (four ports), Service, NetworkPolicy, the `ApisixRoute` for the admin API, bundled Postgres. Compose: Authz and its Postgres on the `shohoz` network.
+Packages: `config`, `db` (pool, migrations), `catalogue` (manifest validation), `rbac` (domain and SQL: catalogue, companies, roles, members, invitations, bundle snapshots; transport-neutral error kinds), `bundle` (signed tarballs via OPA's bundle package, long-poll hub, Postgres listener), `rpcapi` (the proto service implementations as Connect handlers, error and caller mapping), `server` (Vanguard transcoders, chi routers, the two listeners), `idp` (IdP internal client), `events`, `logging`, `ioc` (assembles the modules), `testdb` (test Postgres). Policy and its tests live in `policy/`. Chart: Deployment (two ports), Service, NetworkPolicy, the `ApisixRoute` for the admin API, bundled Postgres. Compose: Authz and its Postgres on the `shohoz` network.
 
 ## 13. Testing
 

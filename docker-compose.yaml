@@ -1,8 +1,10 @@
 # Local Authz and its Postgres (Authz applies its migrations on start). Runs on the external `shohoz` network
 # with ../IdP (Kafka idp-kafka, the UI idp-ui) and ../APISIX (OPA polls authz:8081 for bundles).
 #   docker compose up -d --build
-# Ports on loopback only: public REST 8090 / gRPC 9090 (normally reached through APISIX),
-# internal REST 8091 / gRPC 9091.
+# Ports on loopback only: public 8090 (normally reached through APISIX), internal 8091. Each
+# speaks Connect, gRPC, gRPC-Web and REST.
+# Bundles are signed with a dev key generated on first start into ./dev-keys (gitignored);
+# ../APISIX's OPA reads the public half from there.
 name: bus-authz
 
 services:
@@ -28,16 +30,35 @@ services:
       - rpk topic create authz.events -X brokers=idp-kafka:9092 || echo "authz.events not created (is ../IdP up?)"
     restart: "no"
 
+  # One-shot: the dev bundle signing key pair, created once (readable by Authz's nonroot user).
+  authz-dev-keys:
+    image: alpine/openssl:3.5.4
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        [ -f /keys/bundle-signing.pem ] ||
+        { openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /keys/bundle-signing.pem &&
+        openssl pkey -in /keys/bundle-signing.pem -pubout -out /keys/bundle-signing.pub &&
+        chmod 644 /keys/bundle-signing.pem; }
+    volumes:
+      - ./dev-keys:/keys
+    restart: "no"
+
   authz:
     build: .
     depends_on:
       authz-postgres: { condition: service_healthy }
+      authz-dev-keys: { condition: service_completed_successfully }
     environment:
       AUTHZ_DATABASE_URL: postgres://authz:authz@authz-postgres:5432/authz?sslmode=disable
       AUTHZ_IDP_INTERNAL_URL: http://idp-ui:3001
       AUTHZ_KAFKA_BROKERS: idp-kafka:9092
       AUTHZ_LONG_POLL_SECONDS: "30"
-    ports: ["127.0.0.1:8090:8080", "127.0.0.1:9090:9090", "127.0.0.1:8091:8081", "127.0.0.1:9091:9091"]
+      AUTHZ_BUNDLE_SIGNING_KEY_FILE: /keys/bundle-signing.pem
+      AUTHZ_BUNDLE_SIGNING_KEY_ID: authz-dev
+    volumes:
+      - ./dev-keys:/keys:ro
+    ports: ["127.0.0.1:8090:8080", "127.0.0.1:8091:8081"]
 
 # Every service runs on the external `shohoz` network shared by the repos here (make network in
 # ../IdP). Names are prefixed (authz-*) because Docker DNS aliases them on that network.

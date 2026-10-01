@@ -1,18 +1,19 @@
-package grpcapi
+package rpcapi
 
 import (
 	"context"
 	"log/slog"
 
-	"google.golang.org/grpc/codes"
+	"connectrpc.com/connect"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
+	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
 )
 
 // Internal implements InternalService: seed Jobs, the IdP and platform operations.
 type Internal struct {
-	authzv1.UnimplementedInternalServiceServer
+	authzv1connect.UnimplementedInternalServiceHandler
 	Svc InternalBackend
 	Log *slog.Logger
 }
@@ -27,7 +28,7 @@ func (s *Internal) ApplyManifest(ctx context.Context, req *authzv1.ApplyManifest
 	}
 	res, err := s.Svc.ApplyManifest(ctx, req.GetService(), m)
 	if err != nil {
-		return nil, toStatus(s.Log, err)
+		return nil, toError(s.Log, err)
 	}
 	return &authzv1.ApplyManifestResponse{
 		Service: res.Service, Permissions: int32(res.Permissions), Routes: int32(res.Routes), Changed: res.Changed,
@@ -37,7 +38,7 @@ func (s *Internal) ApplyManifest(ctx context.Context, req *authzv1.ApplyManifest
 func (s *Internal) GetClaims(ctx context.Context, req *authzv1.GetClaimsRequest) (*authzv1.GetClaimsResponse, error) {
 	c, err := s.Svc.Claims(ctx, req.GetSub())
 	if err != nil {
-		return nil, toStatus(s.Log, err)
+		return nil, toError(s.Log, err)
 	}
 	out := &authzv1.GetClaimsResponse{CompanyId: c.CompanyID}
 	for _, r := range c.Roles {
@@ -49,7 +50,7 @@ func (s *Internal) GetClaims(ctx context.Context, req *authzv1.GetClaimsRequest)
 func (s *Internal) CreateCompany(ctx context.Context, req *authzv1.CreateCompanyRequest) (*authzv1.CreateCompanyResponse, error) {
 	id, created, err := s.Svc.CreateCompany(ctx, req.GetName(), req.GetAdminSub())
 	if err != nil {
-		return nil, toStatus(s.Log, err)
+		return nil, toError(s.Log, err)
 	}
 	return &authzv1.CreateCompanyResponse{CompanyId: id, Created: created}, nil
 }
@@ -62,10 +63,10 @@ func (s *Internal) SetCompanyStatus(ctx context.Context, req *authzv1.SetCompany
 	case authzv1.CompanyStatus_COMPANY_STATUS_SUSPENDED:
 		st = "suspended"
 	default:
-		return nil, withReason(codes.InvalidArgument, "invalid_status", "status must be COMPANY_STATUS_ACTIVE or COMPANY_STATUS_SUSPENDED")
+		return nil, withReason(connect.CodeInvalidArgument, "invalid_status", "status must be COMPANY_STATUS_ACTIVE or COMPANY_STATUS_SUSPENDED")
 	}
 	if err := s.Svc.SetCompanyStatus(ctx, req.GetCompanyId(), st); err != nil {
-		return nil, toStatus(s.Log, err)
+		return nil, toError(s.Log, err)
 	}
 	return &authzv1.SetCompanyStatusResponse{}, nil
 }
@@ -73,14 +74,14 @@ func (s *Internal) SetCompanyStatus(ctx context.Context, req *authzv1.SetCompany
 func (s *Internal) GetInvitation(ctx context.Context, req *authzv1.GetInvitationRequest) (*authzv1.GetInvitationResponse, error) {
 	inv, err := s.Svc.GetInvitation(ctx, req.GetId())
 	if err != nil {
-		return nil, toStatus(s.Log, err)
+		return nil, toError(s.Log, err)
 	}
 	return &authzv1.GetInvitationResponse{Invitation: invitationPB(inv)}, nil
 }
 
 func (s *Internal) AcceptInvitation(ctx context.Context, req *authzv1.AcceptInvitationRequest) (*authzv1.AcceptInvitationResponse, error) {
 	if err := s.Svc.AcceptInvitation(ctx, req.GetId(), req.GetSub()); err != nil {
-		return nil, toStatus(s.Log, err)
+		return nil, toError(s.Log, err)
 	}
 	return &authzv1.AcceptInvitationResponse{}, nil
 }

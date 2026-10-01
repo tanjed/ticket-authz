@@ -8,6 +8,14 @@ replicas: 2
 secrets:
   # keys: password, url (postgres://authz:<password>@<release>-postgres:5432/authz?sslmode=disable)
   postgres: { name: authz-postgres }
+  # key: private.pem (RSA, PEM): every OPA bundle is signed with it. The gateway's OPA holds the
+  # public half under bundleSigning.keyId (../APISIX, opa.bundleSigning).
+  bundleSigning: { name: authz-bundle-signing }
+
+# The name OPA's keys config gives the signing key's public half. Rotate by adding the new public
+# key to OPA under a new id, then switching this and the Secret.
+bundleSigning:
+  keyId: ""   # no default: set it in helmvars/
 
 # The IdP UI's cluster-internal Service (invitations). Never its public host: the IdP refuses it.
 idpInternalUrl: http://idp-ui:3001

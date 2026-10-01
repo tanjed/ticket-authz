@@ -1,4 +1,4 @@
-package grpcapi
+package rpcapi
 
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"

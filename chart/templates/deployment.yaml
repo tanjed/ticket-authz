@@ -19,9 +19,7 @@ spec:
           image: "{{ required "image.repository is required (see helmvars/)" .Values.image.repository }}:{{ required "image.tag is required (see helmvars/)" .Values.image.tag }}"
           ports:
             - { name: public, containerPort: 8080 }
-            - { name: public-grpc, containerPort: 9090 }
             - { name: internal, containerPort: 8081 }
-            - { name: internal-grpc, containerPort: 9091 }
           env:
             - name: AUTHZ_DATABASE_URL
               valueFrom: { secretKeyRef: { name: {{ .Values.secrets.postgres.name }}, key: url } }
@@ -29,12 +27,22 @@ spec:
             - { name: AUTHZ_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
             - { name: AUTHZ_KAFKA_TOPIC, value: {{ .Values.kafka.topic | quote }} }
             - { name: AUTHZ_LONG_POLL_SECONDS, value: {{ .Values.longPollSeconds | quote }} }
+            - { name: AUTHZ_BUNDLE_SIGNING_KEY_FILE, value: /keys/bundle-signing.pem }
+            - { name: AUTHZ_BUNDLE_SIGNING_KEY_ID, value: {{ required "bundleSigning.keyId is required (see helmvars/)" .Values.bundleSigning.keyId | quote }} }
+          volumeMounts:
+            - { name: bundle-signing, mountPath: /keys, readOnly: true }
           readinessProbe: { httpGet: { path: /healthz, port: internal } }
-          livenessProbe: { grpc: { port: 9091 }, initialDelaySeconds: 10 }
+          # The standard gRPC health service, over cleartext HTTP/2 on the internal port.
+          livenessProbe: { grpc: { port: 8081 }, initialDelaySeconds: 10 }
           resources: {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: bundle-signing
+          secret:
+            secretName: {{ .Values.secrets.bundleSigning.name }}
+            items: [{ key: private.pem, path: bundle-signing.pem }]
 ---
-# One Service. REST and gRPC side by side: public 8080/9090 (gateway only), internal 8081/9091.
-# OPA's boot config, the IdP and seed Jobs use authz:8081 (or gRPC authz:9091).
+# One Service, two ports, each serving Connect, gRPC, gRPC-Web and REST (HTTP/1.1 and h2c):
+# public 8080 (gateway only), internal 8081 (OPA's boot config, the IdP, seed Jobs).
 apiVersion: v1
 kind: Service
 metadata:
@@ -43,7 +51,5 @@ metadata:
 spec:
   selector: {{- include "authz.selector" . | nindent 4 }}
   ports:
-    - { name: public, port: 8080, targetPort: public }
-    - { name: public-grpc, port: 9090, targetPort: public-grpc, appProtocol: grpc }
-    - { name: internal, port: 8081, targetPort: internal }
-    - { name: internal-grpc, port: 9091, targetPort: internal-grpc, appProtocol: grpc }
+    - { name: public, port: 8080, targetPort: public, appProtocol: kubernetes.io/h2c }
+    - { name: internal, port: 8081, targetPort: internal, appProtocol: kubernetes.io/h2c }

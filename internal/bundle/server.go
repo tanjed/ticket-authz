@@ -34,6 +34,7 @@ type Server struct {
 	Hub       *Hub
 	Discovery Discovery
 	Policies  []Policy
+	Signer    *Signer
 	MaxWait   time.Duration
 	Log       *slog.Logger
 
@@ -134,7 +135,7 @@ func (s *Server) get(ctx context.Context, name string) (built, error) {
 		if hit && c.rev == snap.Revision && c.policies == policyKey(s.Policies) {
 			return c, nil
 		}
-		body, err := Build(name, snap, s.Discovery, s.Policies)
+		body, err := Build(name, snap, s.Discovery, s.Policies, s.Signer)
 		if err != nil {
 			return built{}, err
 		}

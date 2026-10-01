@@ -4,8 +4,8 @@ BIN := $(CURDIR)/bin
 # Pinned code generation tools, installed into ./bin by `make tools`.
 BUF_VERSION := v1.73.0
 PROTOC_GEN_GO_VERSION := v1.36.12
-PROTOC_GEN_GO_GRPC_VERSION := v1.6.2
-GRPC_GATEWAY_VERSION := v2.31.0
+CONNECT_VERSION := v1.21.0
+GRPC_GATEWAY_VERSION := v2.31.0 # protoc-gen-openapiv2 only (a generator, not a runtime dependency)
 
 .PHONY: help
 help: ## list targets
@@ -15,8 +15,7 @@ help: ## list targets
 tools: ## install buf and the protoc plugins (pinned) into ./bin
 	@GOBIN="$(BIN)" go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
 	@GOBIN="$(BIN)" go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
-	@GOBIN="$(BIN)" go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
-	@GOBIN="$(BIN)" go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@$(GRPC_GATEWAY_VERSION)
+	@GOBIN="$(BIN)" go install connectrpc.com/connect/cmd/protoc-gen-connect-go@$(CONNECT_VERSION)
 	@GOBIN="$(BIN)" go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@$(GRPC_GATEWAY_VERSION)
 
 .PHONY: generate

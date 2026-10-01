@@ -1,16 +1,14 @@
-# make generate: Go messages, gRPC, grpc-gateway (REST) and the OpenAPI spec, from proto/.
+# make generate: Go messages, Connect handlers and clients (Vanguard serves them as gRPC, gRPC-Web,
+# Connect and, from the google.api.http annotations, REST) and the OpenAPI spec, from proto/.
 # The plugins are the pinned ones make tools installs in ./bin.
 version: v2
 plugins:
   - local: bin/protoc-gen-go
     out: api/gen
     opt: paths=source_relative
-  - local: bin/protoc-gen-go-grpc
+  - local: bin/protoc-gen-connect-go
     out: api/gen
-    opt: paths=source_relative
-  - local: bin/protoc-gen-grpc-gateway
-    out: api/gen
-    opt: paths=source_relative
+    opt: [paths=source_relative, simple]
   - local: bin/protoc-gen-openapiv2
     out: api/openapi
     opt: [allow_merge=true, merge_file_name=authz, json_names_for_fields=false]

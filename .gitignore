@@ -3,3 +3,4 @@ chart/charts/
 .DS_Store
 /authz
 /bin/
+/dev-keys/

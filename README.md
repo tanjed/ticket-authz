@@ -14,16 +14,23 @@ seeding:  service deploy Job ── ApplyManifest ──► Authz (permissions +
 - **Providers** belong to exactly one company. Each company starts with a protected **Admin** role (every permission, can't be edited, always has a holder). Admins create roles and invite staff. Nobody can hand out permissions they don't hold (escalation rule).
 - Services still enforce **tenant isolation**: every query scoped by `X-Bus-Company-Id`.
 
-## APIs: gRPC and REST side by side
+## APIs: Connect, gRPC, gRPC-Web and REST on one port
 
-Defined in `proto/bus/authz/v1`. REST is grpc-gateway over the same implementations (in-process), from the `google.api.http` annotations. OpenAPI: `api/openapi/authz.swagger.json`.
+Defined in `proto/bus/authz/v1`. The services are [Connect](https://connectrpc.com) handlers; [Vanguard](https://github.com/connectrpc/vanguard-go) serves them as Connect, gRPC and gRPC-Web, and as REST from the `google.api.http` annotations. Each listener speaks HTTP/1.1 and cleartext HTTP/2 (h2c). OpenAPI: `api/openapi/authz.swagger.json`.
 
-| Listener | REST | gRPC | Reachable from | Serves |
-|---|---|---|---|---|
-| public | `:8080` | `:9090` | APISIX only | `AdminService` (roles, members, invitations) |
-| internal | `:8081` | `:9091` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `/bundles/*`, `/healthz` |
+| Listener | Port | Reachable from | Serves |
+|---|---|---|---|
+| public | `:8080` | APISIX only | `AdminService` (roles, members, invitations) |
+| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `/bundles/*`, `/healthz` |
 
-The public listeners trust the caller the gateway passes (`X-Bus-*` headers, `x-bus-*` gRPC metadata); nothing else may reach them. REST errors are `{"error": <reason>, "message"}`; gRPC errors carry the same reason in `ErrorInfo`.
+Both also serve `grpc.health.v1.Health` and reflection (`buf curl --list-methods`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
+
+```sh
+buf curl --protocol grpc --http2-prior-knowledge -d '{"sub":"u1"}' http://localhost:8091/bus.authz.v1.InternalService/GetClaims
+curl localhost:8091/internal/v1/subjects/u1/claims
+```
+
+Every OPA bundle is signed (RS256, OPA's own bundle format); the gateway's OPA refuses one it cannot verify.
 
 ## Seeding a service
 
@@ -47,15 +54,16 @@ make test-policy      # opa test for the gateway policy
 docker compose up -d --build
 ```
 
-Local ports (loopback): public REST 8090, gRPC 9090; internal REST 8091, gRPC 9091; Postgres 5433. `make seed SERVICE=... FILE=...` seeds a manifest.
+Local ports (loopback): public 8090, internal 8091 (every protocol on each); Postgres 5433. The first `docker compose up` creates a dev bundle signing key pair in `dev-keys/` (gitignored); `../APISIX`'s OPA reads its public half from there. `make seed SERVICE=... FILE=...` seeds a manifest.
 
 ## Configuration
 
 | Variable | Meaning |
 |---|---|
 | `AUTHZ_DATABASE_URL` | Postgres (required) |
-| `AUTHZ_PUBLIC_ADDR`, `AUTHZ_PUBLIC_GRPC_ADDR` | Public listeners (`:8080`, `:9090`) |
-| `AUTHZ_INTERNAL_ADDR`, `AUTHZ_INTERNAL_GRPC_ADDR` | Internal listeners (`:8081`, `:9091`) |
+| `AUTHZ_PUBLIC_ADDR` | Public listener (`:8080`) |
+| `AUTHZ_INTERNAL_ADDR` | Internal listener (`:8081`) |
+| `AUTHZ_BUNDLE_SIGNING_KEY_FILE`, `AUTHZ_BUNDLE_SIGNING_KEY_ID` | RSA private key (PEM) every bundle is signed with, and the key id OPA knows its public half by (both required) |
 | `AUTHZ_IDP_INTERNAL_URL` | The IdP UI's cluster-internal URL (invitations; required for `serve`) |
 | `AUTHZ_KAFKA_BROKERS`, `AUTHZ_KAFKA_TOPIC` | Events (`authz.events`); no brokers: events are only logged |
 | `AUTHZ_BUNDLE_SERVICE`, `AUTHZ_LONG_POLL_SECONDS` | What discovery tells OPA (service name `authz`, 30 s) |
@@ -66,12 +74,12 @@ Local ports (loopback): public REST 8090, gRPC 9090; internal REST 8091, gRPC 90
 | Path | Contents |
 |---|---|
 | `cmd/authz` | Entry point: migrations, own manifest, then serve |
-| `proto/`, `api/` | API definitions; generated Go, gateway and OpenAPI (committed) |
+| `proto/`, `api/` | API definitions; generated Go (messages, Connect handlers and clients) and OpenAPI (committed) |
 | `internal/ioc` | Assembles the app from each package's `fx.Module` (`module.go`) |
 | `internal/rbac` | the domain and its SQL |
-| `internal/grpcapi` | proto service implementations |
-| `internal/server` | gateways, chi routers, gRPC servers, the four listeners |
-| `internal/bundle` | OPA bundles: tarballs, long polling |
+| `internal/rpcapi` | proto service implementations (Connect handlers) |
+| `internal/server` | Vanguard transcoders, chi routers, the two listeners |
+| `internal/bundle` | OPA bundles: signed tarballs (OPA's bundle package), long polling |
 | `policy/` | the gateway's rego policy (shipped in the catalogue bundle) and its tests |
 | `manifest/` | Authz's own manifest (its admin API routes), seeded at startup |
 | `migrations/` | goose SQL |
@@ -84,6 +92,6 @@ make lint template
 helm upgrade --install authz chart -f helmvars/dev.yaml
 ```
 
-Pre-created Secret `authz-postgres` (keys `password`, `url`); the chart creates no secrets. Authz applies its migrations on every start (advisory lock: replicas starting together are safe).
+Pre-created Secrets `authz-postgres` (keys `password`, `url`) and `authz-bundle-signing` (key `private.pem`, RSA); the chart creates no secrets. Set `bundleSigning.keyId` in helmvars, and give `../APISIX` the public half under the same id (`opa.bundleSigning`). To rotate: add the new public key to OPA under a new id, then switch the Secret and `bundleSigning.keyId`. Authz applies its migrations on every start (advisory lock: replicas starting together are safe).
 
-Design: `docs/superpowers/specs/2026-09-29-authz-service-design.md`.
+Design: `docs/superpowers/specs/2026-09-29-authz-service-design.md`; transport and bundle signing: `docs/superpowers/specs/2026-10-01-connect-vanguard-signed-bundles-design.md`.

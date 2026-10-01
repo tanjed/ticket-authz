@@ -1,10 +1,10 @@
-package grpcapi
+package rpcapi
 
 import (
 	"context"
 	"log/slog"
 
-	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
+	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 )
@@ -39,8 +39,8 @@ type InternalBackend interface {
 var (
 	_ AdminBackend                  = (*rbac.Service)(nil)
 	_ InternalBackend               = (*rbac.Service)(nil)
-	_ authzv1.AdminServiceServer    = (*Admin)(nil)
-	_ authzv1.InternalServiceServer = (*Internal)(nil)
+	_ authzv1connect.AdminServiceHandler    = (*Admin)(nil)
+	_ authzv1connect.InternalServiceHandler = (*Internal)(nil)
 )
 
 func NewAdmin(b AdminBackend, log *slog.Logger) *Admin          { return &Admin{Svc: b, Log: log} }

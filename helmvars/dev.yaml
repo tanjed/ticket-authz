@@ -2,3 +2,4 @@ domain: dev.bus.example
 image: { repository: registry.dev.bus.example/authz, tag: "0.1.0" }   # PLACEHOLDER: the image built from this repo
 kafka:
   brokers: kafka.dev.bus.example:9092                                # PLACEHOLDER: this environment's Kafka
+bundleSigning: { keyId: authz-dev-1 }                                # must match ../APISIX opa.bundleSigning.keyId
