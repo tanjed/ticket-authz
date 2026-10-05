@@ -181,6 +181,12 @@ type fakeSource struct {
 	builds atomic.Int32
 }
 
+func (f *fakeSource) BundleRevisions(context.Context) ([]rbac.BundleRev, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return []rbac.BundleRev{{Name: rbac.BundleCatalogue, Revision: f.rev}}, nil
+}
+
 func (f *fakeSource) BundleRevision(_ context.Context, name string) (int64, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

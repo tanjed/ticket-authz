@@ -2,27 +2,15 @@ package server
 
 import (
 	"context"
-	"log/slog"
-	"net/http"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
-
-	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
-	"github.com/tanjed/bus2/authz/internal/bundle"
-	"github.com/tanjed/bus2/authz/internal/config"
 )
 
 // Module runs the two listeners; include it last, so they open after everything else started.
 var Module = fx.Module("server",
-	fx.Provide(fx.Annotate(provideServers, fx.ParamTags(``, ``, ``, bundle.Tag))),
+	fx.Provide(New),
 	fx.Invoke(runOnStart),
 )
-
-func provideServers(cfg config.Config, admin authzv1connect.AdminServiceHandler, internal authzv1connect.InternalServiceHandler,
-	bundles http.Handler, pool *pgxpool.Pool, log *slog.Logger) (*Servers, error) {
-	return New(Params{Cfg: cfg, Admin: admin, Internal: internal, Bundles: bundles, Pool: pool, Log: log})
-}
 
 func runOnStart(lc fx.Lifecycle, sd fx.Shutdowner, s *Servers) {
 	lc.Append(fx.Hook{

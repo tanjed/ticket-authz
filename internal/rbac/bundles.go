@@ -36,6 +36,21 @@ type Snapshot struct {
 	CompanyIDs []string             // discovery
 }
 
+// BundleRevisions returns every bundle's current revision, by name.
+func (s *Service) BundleRevisions(ctx context.Context) ([]BundleRev, error) {
+	rows, err := s.DB.Query(ctx, `SELECT name, revision FROM bundle_revisions ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[BundleRev])
+}
+
+// BundleRev is one bundle's revision.
+type BundleRev struct {
+	Name     string
+	Revision int64
+}
+
 // BundleRevision returns a bundle's current revision; ok is false for an unknown bundle.
 func (s *Service) BundleRevision(ctx context.Context, name string) (rev int64, ok bool, err error) {
 	err = s.DB.QueryRow(ctx, `SELECT revision FROM bundle_revisions WHERE name = $1`, name).Scan(&rev)

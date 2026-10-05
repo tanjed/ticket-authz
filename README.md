@@ -20,10 +20,10 @@ Defined in `proto/bus/authz/v1`. The services are [Connect](https://connectrpc.c
 
 | Listener | Port | Reachable from | Serves |
 |---|---|---|---|
-| public | `:8080` | APISIX only | `AdminService` (roles, members, invitations) |
-| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `/bundles/*`, `/healthz` |
+| public | `:8080` | APISIX only | `AdminService` (roles, members, invitations), `HealthService` |
+| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `BundleService` (list and fetch the signed bundles), `HealthService`, `/bundles/*` (OPA's download) |
 
-Both also serve `grpc.health.v1.Health` and reflection (`buf curl --list-methods`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
+`HealthService.Check` (REST `GET /healthz`, the readiness probe) pings every dependency: 503 / `UNAVAILABLE` naming the failed ones. Both also serve `grpc.health.v1.Health` (static, the liveness probe) and reflection (`buf curl --list-methods`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
 
 ```sh
 buf curl --protocol grpc --http2-prior-knowledge -d '{"sub":"u1"}' http://localhost:8091/bus.authz.v1.InternalService/GetClaims

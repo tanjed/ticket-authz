@@ -2,50 +2,89 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
+	"connectrpc.com/vanguard"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// zone is one trust zone's RPC side: its service under its RPC path (Connect, gRPC, gRPC-Web),
-// its REST prefix, and the health and reflection services.
+// zone is one listener's routes: proto services (served together by one Vanguard transcoder)
+// and hand-written handlers. wire fills it; router turns it into the listener's handler.
 type zone struct {
-	rpcPath    string // e.g. /bus.authz.v1.AdminService/
-	restPrefix string // e.g. /v1/
-	transcoder http.Handler
-	extras     map[string]http.Handler // health, reflection: path prefix -> handler
+	services []rpcService
+	handlers []rawHandler
 }
 
-func (z zone) mount(r chi.Router) {
-	r.Handle(z.rpcPath+"*", z.transcoder)
-	r.Handle(z.restPrefix+"*", restErrors(z.transcoder))
-	for path, h := range z.extras {
-		r.Handle(path+"*", h)
+type rpcService struct {
+	path    string // e.g. /bus.authz.v1.AdminService/
+	handler http.Handler
+}
+
+type rawHandler struct {
+	pattern string
+	handler http.Handler
+}
+
+func newZone() *zone { return &zone{} }
+
+// Service adds a proto service: pass a generated New...ServiceHandler call as is.
+func (z *zone) Service(path string, h http.Handler) {
+	z.services = append(z.services, rpcService{path, h})
+}
+
+// Handle adds a hand-written handler under a chi pattern, optionally method-prefixed
+// ("GET /bundles/*").
+func (z *zone) Handle(pattern string, h http.Handler) {
+	z.handlers = append(z.handlers, rawHandler{pattern, h})
+}
+
+// zones adds the same service or handler to several zones.
+type zones []*zone
+
+func (zs zones) Service(path string, h http.Handler) {
+	for _, z := range zs {
+		z.Service(path, h)
 	}
 }
 
-// publicRouter: the admin API, under /v1 for REST (APISIX strips its /authz prefix).
-func publicRouter(z zone) http.Handler {
-	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.Recoverer)
-	z.mount(r)
-	return r
+func (zs zones) Handle(pattern string, h http.Handler) {
+	for _, z := range zs {
+		z.Handle(pattern, h)
+	}
 }
 
-// internalRouter: the internal API, OPA's bundles (binary, long-polled: not a proto service) and
-// the kubelet's readiness check.
-func internalRouter(z zone, bundles http.Handler, pool *pgxpool.Pool) http.Handler {
+// router builds the zone's handler. Each service's RPC path goes to the transcoder as it is
+// (Connect, gRPC, gRPC-Web keep their own errors); health and reflection list only the zone's
+// services; every other path is REST (the transcoder matches the google.api.http annotations,
+// unknown paths are 404) behind restErrors. The hand-written handlers come first in chi's
+// matching, being more specific than the REST catch-all.
+func (z *zone) router() (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer)
-	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := pool.Ping(r.Context()); err != nil {
-			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		_, _ = w.Write([]byte("ok"))
-	})
-	r.Get("/bundles/*", bundles.ServeHTTP)
-	z.mount(r)
-	return r
+	for _, h := range z.handlers {
+		r.Handle(h.pattern, h.handler)
+	}
+	if len(z.services) == 0 {
+		return r, nil
+	}
+
+	vs := make([]*vanguard.Service, 0, len(z.services))
+	names := make([]string, 0, len(z.services))
+	for _, s := range z.services {
+		vs = append(vs, vanguard.NewService(s.path, s.handler))
+		names = append(names, strings.Trim(s.path, "/"))
+	}
+	tc, err := newTranscoder(vs...)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range z.services {
+		r.Handle(s.path+"*", tc)
+	}
+	for path, h := range extras(names...) {
+		r.Handle(path+"*", h)
+	}
+	r.Handle("/*", restErrors(tc))
+	return r, nil
 }

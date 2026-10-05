@@ -26,6 +26,7 @@ import (
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/bundle"
 	"github.com/tanjed/bus2/authz/internal/events"
+	"github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/rbac"
@@ -67,12 +68,14 @@ func newStack(t *testing.T) stack {
 	testdb.Reset(t, pool)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, time.Hour)
+	bundles := &bundle.Server{Src: svc, Hub: bundle.NewHub(), Signer: testSigner(t), MaxWait: time.Second, Log: log}
 	h, err := build(Params{
 		Admin:    &rpcapi.Admin{Svc: svc, Log: log},
 		Internal: &rpcapi.Internal{Svc: svc, Log: log},
-		Bundles:  &bundle.Server{Src: svc, Hub: bundle.NewHub(), Signer: testSigner(t), MaxWait: time.Second, Log: log},
-		Pool:     pool,
-		Log:      log,
+		Bundle:     rpcapi.NewBundle(bundles, log),
+		Health:     rpcapi.NewHealth(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log),
+		OPABundles: bundles,
+		Log:        log,
 	})
 	require.NoError(t, err)
 	serve := func(h http.Handler) string {
@@ -256,5 +259,75 @@ func TestHealth(t *testing.T) {
 		res, err := grpchealth.NewClient(s.client, url, connect.WithGRPC()).Check(context.Background(), &grpchealth.CheckRequest{})
 		require.NoError(t, err, url)
 		require.Equal(t, grpchealth.StatusServing, res.Status)
+
+		hs, err := authzv1connect.NewHealthServiceClient(s.client, url, connect.WithGRPC()).Check(context.Background(), &authzv1.CheckRequest{})
+		require.NoError(t, err, url)
+		require.Equal(t, []string{"db"}, hs.GetComponents())
 	}
+	for _, h := range []http.Handler{s.h.public, s.h.internal} {
+		code, body := do(t, h, "GET", "/healthz", "", nil)
+		require.Equal(t, http.StatusOK, code)
+		require.Equal(t, []any{"db"}, body["components"])
+	}
+}
+
+// A failed probe: 503 on REST (the readiness probe reads the status), UNAVAILABLE on RPC, and the
+// message names the component without its error.
+func TestHealth_Unavailable(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	down := health.New([]health.Probe{{Name: "db", Check: func(context.Context) error { return fmt.Errorf("dial tcp 10.0.0.5:5432: refused") }}})
+	h, err := build(Params{Admin: &rpcapi.Admin{}, Internal: &rpcapi.Internal{}, Bundle: &rpcapi.Bundle{}, Health: rpcapi.NewHealth(down, log), Log: log})
+	require.NoError(t, err)
+
+	code, body := do(t, h.internal, "GET", "/healthz", "", nil)
+	require.Equal(t, http.StatusServiceUnavailable, code)
+	require.Equal(t, map[string]any{"error": "unhealthy", "message": "unavailable: db"}, body)
+
+	connectJSON := map[string]string{"Content-Type": "application/json", "Connect-Protocol-Version": "1"}
+	code, body = do(t, h.public, "POST", "/bus.authz.v1.HealthService/Check", `{}`, connectJSON)
+	require.Equal(t, http.StatusServiceUnavailable, code)
+	require.Equal(t, "unavailable", body["code"])
+}
+
+func TestBundleService(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	client := authzv1connect.NewBundleServiceClient(s.client, s.internalURL, connect.WithGRPC())
+
+	list, err := client.ListBundles(ctx, &authzv1.ListBundlesRequest{})
+	require.NoError(t, err)
+	var names []string
+	for _, b := range list.GetBundles() {
+		names = append(names, b.GetName())
+	}
+	require.Contains(t, names, rbac.BundleCatalogue)
+
+	// The same bundle OPA downloads: its revision is OPA's ETag.
+	got, err := client.GetBundle(ctx, &authzv1.GetBundleRequest{Name: rbac.BundleCatalogue})
+	require.NoError(t, err)
+	require.NotEmpty(t, got.GetBody())
+	req := httptest.NewRequest("GET", "/bundles/catalogue.tar.gz", nil)
+	rec := httptest.NewRecorder()
+	s.h.internal.ServeHTTP(rec, req)
+	require.Equal(t, `"`+got.GetBundle().GetRevision()+`"`, rec.Header().Get("ETag"))
+
+	_, err = client.GetBundle(ctx, &authzv1.GetBundleRequest{Name: "nope"})
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Equal(t, "bundle_not_found", rpcapi.Reason(err))
+
+	// REST, names with a slash included.
+	code, body := do(t, s.h.internal, "GET", "/internal/v1/bundles", "", nil)
+	require.Equal(t, http.StatusOK, code)
+	require.NotEmpty(t, body["bundles"])
+	code, body = do(t, s.h.internal, "GET", "/internal/v1/bundles/companies/00000000-0000-0000-0000-000000000000", "", nil)
+	require.Equal(t, http.StatusNotFound, code)
+	require.Equal(t, "bundle_not_found", body["error"])
+
+	// Internal only.
+	code, _ = do(t, s.h.public, "GET", "/internal/v1/bundles", "", nil)
+	require.Equal(t, http.StatusNotFound, code)
+	code, _ = do(t, s.h.public, "GET", "/bundles/catalogue.tar.gz", "", nil)
+	require.Equal(t, http.StatusNotFound, code)
+	_, err = authzv1connect.NewBundleServiceClient(s.client, s.publicURL, connect.WithGRPC()).ListBundles(ctx, &authzv1.ListBundlesRequest{})
+	require.Error(t, err, "BundleService is not on the public listener")
 }

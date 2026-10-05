@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package bus.authz.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1";
+
+// HealthService reports whether Authz can serve: every dependency it needs, checked live. Served
+// on both listeners; the kubelet's readiness probe reads GET /healthz on the internal one.
+service HealthService {
+  // UNAVAILABLE (REST: 503) when any component is down, so a plain HTTP probe reads the status
+  // alone. The message names the failed components, never their errors (those are logged).
+  rpc Check(CheckRequest) returns (CheckResponse) {
+    option (google.api.http) = {get: "/healthz"};
+  }
+}
+
+message CheckRequest {}
+
+message CheckResponse {
+  // The components checked, all healthy (e.g. "db").
+  repeated string components = 1;
+}

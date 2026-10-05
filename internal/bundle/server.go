@@ -2,6 +2,7 @@ package bundle
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -19,6 +20,7 @@ const ContentType = "application/vnd.openpolicyagent.bundles"
 
 // Source is the data side (rbac.Service).
 type Source interface {
+	BundleRevisions(ctx context.Context) ([]rbac.BundleRev, error)
 	BundleRevision(ctx context.Context, name string) (int64, bool, error)
 	BundleSnapshot(ctx context.Context, name string) (rbac.Snapshot, bool, error)
 }
@@ -116,6 +118,43 @@ func (s *Server) wait(r *http.Request) time.Duration {
 		}
 	}
 	return 0
+}
+
+// Info is a bundle's name and the revision in its manifest.
+type Info struct {
+	Name     string
+	Revision string
+}
+
+// Bundle is a signed bundle, as OPA receives it.
+type Bundle struct {
+	Info
+	Body []byte
+}
+
+// List returns every bundle with its manifest revision.
+func (s *Server) List(ctx context.Context) ([]Info, error) {
+	revs, err := s.Src.BundleRevisions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Info, 0, len(revs))
+	for _, r := range revs {
+		out = append(out, Info{Name: r.Name, Revision: Revision(r.Name, r.Revision, s.Policies)})
+	}
+	return out, nil
+}
+
+// Get returns a bundle at its latest revision; ok is false for an unknown bundle.
+func (s *Server) Get(ctx context.Context, name string) (b Bundle, ok bool, err error) {
+	c, err := s.get(ctx, name)
+	if errors.Is(err, errGone) {
+		return Bundle{}, false, nil
+	}
+	if err != nil {
+		return Bundle{}, false, err
+	}
+	return Bundle{Info: Info{Name: name, Revision: Revision(name, c.rev, s.Policies)}, Body: c.body}, true, nil
 }
 
 // get returns the bundle at its latest revision, building it at most once per revision.

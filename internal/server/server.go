@@ -14,21 +14,23 @@ import (
 
 	"connectrpc.com/grpchealth"
 	"connectrpc.com/grpcreflect"
-	"connectrpc.com/vanguard"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/fx"
 
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/config"
 )
 
-// Params is what the servers need; internal/ioc supplies it.
+// Params is what the servers need; fx fills it (internal/ioc), tests build it.
 type Params struct {
-	Cfg      config.Config
-	Admin    authzv1connect.AdminServiceHandler
-	Internal authzv1connect.InternalServiceHandler
-	Bundles  http.Handler // OPA's bundle endpoint
-	Pool     *pgxpool.Pool
-	Log      *slog.Logger
+	fx.In
+
+	Cfg        config.Config
+	Admin      authzv1connect.AdminServiceHandler
+	Internal   authzv1connect.InternalServiceHandler
+	Bundle     authzv1connect.BundleServiceHandler
+	Health     authzv1connect.HealthServiceHandler
+	OPABundles http.Handler `name:"bundles"` // OPA's bundle download
+	Log        *slog.Logger
 }
 
 // handlers are the two listeners' handlers, built without opening any socket (tests use them).
@@ -36,34 +38,27 @@ type handlers struct {
 	public, internal http.Handler
 }
 
+// build turns wire (routes.go) into one handler per listener.
 func build(p Params) (handlers, error) {
-	opts := handlerOptions(p.Log)
-	// Each zone registers only its own service (trust zones: AdminService never on internal,
-	// InternalService never on public).
-	adminPath, admin := authzv1connect.NewAdminServiceHandler(p.Admin, opts...)
-	internalPath, internal := authzv1connect.NewInternalServiceHandler(p.Internal, opts...)
-	publicTC, err := newTranscoder(vanguard.NewService(adminPath, admin))
-	if err != nil {
-		return handlers{}, err
-		
-	}
-	internalTC, err := newTranscoder(vanguard.NewService(internalPath, internal))
+	public, internal := wire(p)
+	pub, err := public.router()
 	if err != nil {
 		return handlers{}, err
 	}
-	return handlers{
-		public:   publicRouter(zone{rpcPath: adminPath, restPrefix: "/v1/", transcoder: publicTC, extras: extras(authzv1connect.AdminServiceName)}),
-		internal: internalRouter(zone{rpcPath: internalPath, restPrefix: "/internal/", transcoder: internalTC, extras: extras(authzv1connect.InternalServiceName)}, p.Bundles, p.Pool),
-	}, nil
+	in, err := internal.router()
+	if err != nil {
+		return handlers{}, err
+	}
+	return handlers{public: pub, internal: in}, nil
 }
 
 // extras: the standard health service (the kubelet's liveness probe) and reflection (grpcurl,
-// buf curl), each listing only the zone's own service.
-func extras(service string) map[string]http.Handler {
+// buf curl), each listing only the zone's own services.
+func extras(services ...string) map[string]http.Handler {
 	out := map[string]http.Handler{}
 	add := func(path string, h http.Handler) { out[path] = h }
-	add(grpchealth.NewHandler(grpchealth.NewStaticChecker(service)))
-	reflector := grpcreflect.NewStaticReflector(service)
+	add(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))
+	reflector := grpcreflect.NewStaticReflector(services...)
 	add(grpcreflect.NewHandlerV1(reflector))
 	add(grpcreflect.NewHandlerV1Alpha(reflector))
 	return out

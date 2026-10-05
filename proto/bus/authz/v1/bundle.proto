@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package bus.authz.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1";
+
+// BundleService shows the signed OPA bundles to operators and tools. OPA itself downloads them
+// from GET /bundles/{name}.tar.gz (ETag, long polling and 304 Not Modified: a protocol an RPC
+// cannot speak). Served on the internal listener only.
+service BundleService {
+  // Every bundle with its current revision.
+  rpc ListBundles(ListBundlesRequest) returns (ListBundlesResponse) {
+    option (google.api.http) = {get: "/internal/v1/bundles"};
+  }
+  // A bundle as OPA receives it. NOT_FOUND: no such bundle.
+  rpc GetBundle(GetBundleRequest) returns (GetBundleResponse) {
+    option (google.api.http) = {get: "/internal/v1/bundles/{name=**}"};
+  }
+}
+
+message BundleInfo {
+  // discovery, catalogue, consumer or companies/<company_id>.
+  string name = 1;
+  // The revision in the bundle's manifest (what OPA reports as active).
+  string revision = 2;
+}
+
+message ListBundlesRequest {}
+
+message ListBundlesResponse {
+  repeated BundleInfo bundles = 1;
+}
+
+message GetBundleRequest {
+  string name = 1;
+}
+
+message GetBundleResponse {
+  BundleInfo bundle = 1;
+  // The signed bundle, a .tar.gz.
+  bytes body = 2;
+}

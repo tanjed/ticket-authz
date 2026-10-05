@@ -5,7 +5,9 @@ import (
 	"log/slog"
 
 	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
+	"github.com/tanjed/bus2/authz/internal/bundle"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
+	"github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 )
 
@@ -34,14 +36,24 @@ type InternalBackend interface {
 	AcceptInvitation(ctx context.Context, id, sub string) error
 }
 
+// BundleBackend is what BundleService needs: the bundle server's signed bundles.
+type BundleBackend interface {
+	List(ctx context.Context) ([]bundle.Info, error)
+	Get(ctx context.Context, name string) (bundle.Bundle, bool, error)
+}
+
 // Compile-time checks: the domain satisfies both backends, and the implementations satisfy the
 // generated service interfaces.
 var (
-	_ AdminBackend                  = (*rbac.Service)(nil)
-	_ InternalBackend               = (*rbac.Service)(nil)
+	_ AdminBackend                          = (*rbac.Service)(nil)
+	_ InternalBackend                       = (*rbac.Service)(nil)
 	_ authzv1connect.AdminServiceHandler    = (*Admin)(nil)
 	_ authzv1connect.InternalServiceHandler = (*Internal)(nil)
+	_ authzv1connect.HealthServiceHandler   = (*Health)(nil)
+	_ authzv1connect.BundleServiceHandler   = (*Bundle)(nil)
 )
 
 func NewAdmin(b AdminBackend, log *slog.Logger) *Admin          { return &Admin{Svc: b, Log: log} }
 func NewInternal(b InternalBackend, log *slog.Logger) *Internal { return &Internal{Svc: b, Log: log} }
+func NewBundle(b BundleBackend, log *slog.Logger) *Bundle       { return &Bundle{Svc: b, Log: log} }
+func NewHealth(c health.Checker, log *slog.Logger) *Health      { return &Health{Checker: c, Log: log} }

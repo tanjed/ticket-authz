@@ -10,6 +10,14 @@
       "description": "AdminService is the company admin API, served on the public listeners (REST :8080, gRPC :9090).\nOnly the APISIX gateway can reach them: it has verified the caller's token and the route's\npermission, and passes the caller as x-bus-subject, x-bus-company-id and x-bus-user-type\n(HTTP headers, or gRPC metadata). Every call is scoped to the caller's company and checked\nagainst the escalation rule: nobody hands out permissions they do not hold."
     },
     {
+      "name": "BundleService",
+      "description": "BundleService shows the signed OPA bundles to operators and tools. OPA itself downloads them\nfrom GET /bundles/{name}.tar.gz (ETag, long polling and 304 Not Modified: a protocol an RPC\ncannot speak). Served on the internal listener only."
+    },
+    {
+      "name": "HealthService",
+      "description": "HealthService reports whether Authz can serve: every dependency it needs, checked live. Served\non both listeners; the kubelet's readiness probe reads GET /healthz on the internal one."
+    },
+    {
       "name": "InternalService",
       "description": "InternalService is for callers inside the cluster: services' seed Jobs, the IdP, platform\noperations. Served on the internal listeners (REST :8081, gRPC :9091), which the gateway never\nroutes. It has no authentication: the network is the boundary."
     }
@@ -21,6 +29,84 @@
     "application/json"
   ],
   "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "UNAVAILABLE (REST: 503) when any component is down, so a plain HTTP probe reads the status\nalone. The message names the failed components, never their errors (those are logged).",
+        "operationId": "HealthService_Check",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1CheckResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HealthService"
+        ]
+      }
+    },
+    "/internal/v1/bundles": {
+      "get": {
+        "summary": "Every bundle with its current revision.",
+        "operationId": "BundleService_ListBundles",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListBundlesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "BundleService"
+        ]
+      }
+    },
+    "/internal/v1/bundles/{name}": {
+      "get": {
+        "summary": "A bundle as OPA receives it. NOT_FOUND: no such bundle.",
+        "operationId": "BundleService_GetBundle",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetBundleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "pattern": ".+"
+          }
+        ],
+        "tags": [
+          "BundleService"
+        ]
+      }
+    },
     "/internal/v1/companies": {
       "post": {
         "summary": "Registers a company with its protected admin role held by admin_sub. Idempotent per subject:\nif admin_sub already belongs to a company, that company is returned (created = false).",
@@ -660,6 +746,31 @@
         }
       }
     },
+    "v1BundleInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "discovery, catalogue, consumer or companies/\u003ccompany_id\u003e."
+        },
+        "revision": {
+          "type": "string",
+          "description": "The revision in the bundle's manifest (what OPA reports as active)."
+        }
+      }
+    },
+    "v1CheckResponse": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The components checked, all healthy (e.g. \"db\")."
+        }
+      }
+    },
     "v1CompanyStatus": {
       "type": "string",
       "enum": [
@@ -739,6 +850,19 @@
     },
     "v1DeleteRoleResponse": {
       "type": "object"
+    },
+    "v1GetBundleResponse": {
+      "type": "object",
+      "properties": {
+        "bundle": {
+          "$ref": "#/definitions/v1BundleInfo"
+        },
+        "body": {
+          "type": "string",
+          "format": "byte",
+          "description": "The signed bundle, a .tar.gz."
+        }
+      }
     },
     "v1GetClaimsResponse": {
       "type": "object",
@@ -826,6 +950,18 @@
         "INVITATION_STATUS_EXPIRED"
       ],
       "default": "INVITATION_STATUS_UNSPECIFIED"
+    },
+    "v1ListBundlesResponse": {
+      "type": "object",
+      "properties": {
+        "bundles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1BundleInfo"
+          }
+        }
+      }
     },
     "v1ListInvitationsResponse": {
       "type": "object",

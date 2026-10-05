@@ -19,13 +19,15 @@ import (
 // Tag is the name the bundle endpoint (an http.Handler) is provided under.
 const Tag = `name:"bundles"`
 
-// Module provides the bundle endpoint as an http.Handler tagged bundles, reading from the domain
-// as a Source, and runs the Postgres listener that wakes its long polls.
+// Module provides the bundle Server (BundleService reads it), also as the OPA endpoint: an
+// http.Handler tagged bundles. It reads the domain as a Source, and runs the Postgres listener
+// that wakes the long polls.
 var Module = fx.Module("bundle",
 	fx.Provide(
 		NewHub,
 		fx.Annotate(func(s *rbac.Service) *rbac.Service { return s }, fx.As(new(Source))),
-		fx.Annotate(provideServer, fx.As(new(http.Handler)), fx.ResultTags(Tag)),
+		provideServer,
+		fx.Annotate(func(s *Server) *Server { return s }, fx.As(new(http.Handler)), fx.ResultTags(Tag)),
 	),
 	fx.Invoke(listenOnStart),
 )

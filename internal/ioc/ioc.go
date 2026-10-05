@@ -12,10 +12,11 @@ import (
 	"github.com/tanjed/bus2/authz/internal/config"
 	"github.com/tanjed/bus2/authz/internal/db"
 	"github.com/tanjed/bus2/authz/internal/events"
-	"github.com/tanjed/bus2/authz/internal/rpcapi"
+	"github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/logging"
 	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/server"
 )
 
@@ -24,6 +25,7 @@ var Modules = fx.Options(
 	logging.Module,
 	config.Module,
 	db.Module,
+	health.Module,
 	events.Module,
 	idp.Module,
 	rbac.Module,
