@@ -23,10 +23,10 @@ Defined in `proto/bus/authz/v1`. The services are [Connect](https://connectrpc.c
 | public | `:8080` | APISIX only | `AdminService` (roles, members, invitations), `HealthService` |
 | internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `BundleService` (list and fetch the signed bundles), `HealthService`, `/bundles/*` (OPA's download) |
 
-`HealthService.Check` (REST `GET /healthz`, the readiness probe) pings every dependency: 503 / `UNAVAILABLE` naming the failed ones. Both also serve `grpc.health.v1.Health` (static, the liveness probe) and reflection (`buf curl --list-methods`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
+`HealthService` is the kubelet's probes: `GET /live` (liveness: the process answers, no dependency checked, so a DB outage never restarts pods) and `GET /ready` (readiness: pings every dependency; 503 / `UNAVAILABLE` naming the failed ones). No gRPC health or server reflection: tools read the schema from `proto/` (`buf curl --schema .`, `grpcurl -import-path proto -proto ...`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
 
 ```sh
-buf curl --protocol grpc --http2-prior-knowledge -d '{"sub":"u1"}' http://localhost:8091/bus.authz.v1.InternalService/GetClaims
+buf curl --schema . --protocol grpc --http2-prior-knowledge -d '{"sub":"u1"}' http://localhost:8091/bus.authz.v1.InternalService/GetClaims
 curl localhost:8091/internal/v1/subjects/u1/claims
 ```
 

@@ -22,26 +22,26 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type CheckRequest struct {
+type LiveRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CheckRequest) Reset() {
-	*x = CheckRequest{}
+func (x *LiveRequest) Reset() {
+	*x = LiveRequest{}
 	mi := &file_bus_authz_v1_health_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CheckRequest) String() string {
+func (x *LiveRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CheckRequest) ProtoMessage() {}
+func (*LiveRequest) ProtoMessage() {}
 
-func (x *CheckRequest) ProtoReflect() protoreflect.Message {
+func (x *LiveRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_bus_authz_v1_health_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -53,12 +53,84 @@ func (x *CheckRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CheckRequest.ProtoReflect.Descriptor instead.
-func (*CheckRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use LiveRequest.ProtoReflect.Descriptor instead.
+func (*LiveRequest) Descriptor() ([]byte, []int) {
 	return file_bus_authz_v1_health_proto_rawDescGZIP(), []int{0}
 }
 
-type CheckResponse struct {
+type LiveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LiveResponse) Reset() {
+	*x = LiveResponse{}
+	mi := &file_bus_authz_v1_health_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LiveResponse) ProtoMessage() {}
+
+func (x *LiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_health_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LiveResponse.ProtoReflect.Descriptor instead.
+func (*LiveResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_health_proto_rawDescGZIP(), []int{1}
+}
+
+type ReadyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadyRequest) Reset() {
+	*x = ReadyRequest{}
+	mi := &file_bus_authz_v1_health_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadyRequest) ProtoMessage() {}
+
+func (x *ReadyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_health_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadyRequest.ProtoReflect.Descriptor instead.
+func (*ReadyRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_health_proto_rawDescGZIP(), []int{2}
+}
+
+type ReadyResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The components checked, all healthy (e.g. "db").
 	Components    []string `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
@@ -66,21 +138,21 @@ type CheckResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CheckResponse) Reset() {
-	*x = CheckResponse{}
-	mi := &file_bus_authz_v1_health_proto_msgTypes[1]
+func (x *ReadyResponse) Reset() {
+	*x = ReadyResponse{}
+	mi := &file_bus_authz_v1_health_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CheckResponse) String() string {
+func (x *ReadyResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CheckResponse) ProtoMessage() {}
+func (*ReadyResponse) ProtoMessage() {}
 
-func (x *CheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_health_proto_msgTypes[1]
+func (x *ReadyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_health_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -91,12 +163,12 @@ func (x *CheckResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CheckResponse.ProtoReflect.Descriptor instead.
-func (*CheckResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_health_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use ReadyResponse.ProtoReflect.Descriptor instead.
+func (*ReadyResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_health_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *CheckResponse) GetComponents() []string {
+func (x *ReadyResponse) GetComponents() []string {
 	if x != nil {
 		return x.Components
 	}
@@ -107,15 +179,17 @@ var File_bus_authz_v1_health_proto protoreflect.FileDescriptor
 
 const file_bus_authz_v1_health_proto_rawDesc = "" +
 	"\n" +
-	"\x19bus/authz/v1/health.proto\x12\fbus.authz.v1\x1a\x1cgoogle/api/annotations.proto\"\x0e\n" +
-	"\fCheckRequest\"/\n" +
-	"\rCheckResponse\x12\x1e\n" +
+	"\x19bus/authz/v1/health.proto\x12\fbus.authz.v1\x1a\x1cgoogle/api/annotations.proto\"\r\n" +
+	"\vLiveRequest\"\x0e\n" +
+	"\fLiveResponse\"\x0e\n" +
+	"\fReadyRequest\"/\n" +
+	"\rReadyResponse\x12\x1e\n" +
 	"\n" +
 	"components\x18\x01 \x03(\tR\n" +
-	"components2c\n" +
-	"\rHealthService\x12R\n" +
-	"\x05Check\x12\x1a.bus.authz.v1.CheckRequest\x1a\x1b.bus.authz.v1.CheckResponse\"\x10\x82\xd3\xe4\x93\x02\n" +
-	"\x12\b/healthzB;Z9github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1b\x06proto3"
+	"components2\xaf\x01\n" +
+	"\rHealthService\x12L\n" +
+	"\x04Live\x12\x19.bus.authz.v1.LiveRequest\x1a\x1a.bus.authz.v1.LiveResponse\"\r\x82\xd3\xe4\x93\x02\a\x12\x05/live\x12P\n" +
+	"\x05Ready\x12\x1a.bus.authz.v1.ReadyRequest\x1a\x1b.bus.authz.v1.ReadyResponse\"\x0e\x82\xd3\xe4\x93\x02\b\x12\x06/readyB;Z9github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1b\x06proto3"
 
 var (
 	file_bus_authz_v1_health_proto_rawDescOnce sync.Once
@@ -129,16 +203,20 @@ func file_bus_authz_v1_health_proto_rawDescGZIP() []byte {
 	return file_bus_authz_v1_health_proto_rawDescData
 }
 
-var file_bus_authz_v1_health_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_bus_authz_v1_health_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_bus_authz_v1_health_proto_goTypes = []any{
-	(*CheckRequest)(nil),  // 0: bus.authz.v1.CheckRequest
-	(*CheckResponse)(nil), // 1: bus.authz.v1.CheckResponse
+	(*LiveRequest)(nil),   // 0: bus.authz.v1.LiveRequest
+	(*LiveResponse)(nil),  // 1: bus.authz.v1.LiveResponse
+	(*ReadyRequest)(nil),  // 2: bus.authz.v1.ReadyRequest
+	(*ReadyResponse)(nil), // 3: bus.authz.v1.ReadyResponse
 }
 var file_bus_authz_v1_health_proto_depIdxs = []int32{
-	0, // 0: bus.authz.v1.HealthService.Check:input_type -> bus.authz.v1.CheckRequest
-	1, // 1: bus.authz.v1.HealthService.Check:output_type -> bus.authz.v1.CheckResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	0, // 0: bus.authz.v1.HealthService.Live:input_type -> bus.authz.v1.LiveRequest
+	2, // 1: bus.authz.v1.HealthService.Ready:input_type -> bus.authz.v1.ReadyRequest
+	1, // 2: bus.authz.v1.HealthService.Live:output_type -> bus.authz.v1.LiveResponse
+	3, // 3: bus.authz.v1.HealthService.Ready:output_type -> bus.authz.v1.ReadyResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -155,7 +233,7 @@ func file_bus_authz_v1_health_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bus_authz_v1_health_proto_rawDesc), len(file_bus_authz_v1_health_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

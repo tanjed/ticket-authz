@@ -16,7 +16,7 @@ func wire(p Params) (public, internal *zone) {
 	public.Service(authzv1connect.NewAdminServiceHandler(p.Admin, opts...))
 	internal.Service(authzv1connect.NewInternalServiceHandler(p.Internal, opts...))
 	internal.Service(authzv1connect.NewBundleServiceHandler(p.Bundle, opts...))
-	both.Service(authzv1connect.NewHealthServiceHandler(p.Health, opts...))
+	both.Service(authzv1connect.NewHealthServiceHandler(p.Health, opts...)) // GET /live, /ready
 
 	// OPA's bundle download: ETag, long polling and 304, which an RPC cannot speak.
 	internal.Handle("GET /bundles/*", p.OPABundles)

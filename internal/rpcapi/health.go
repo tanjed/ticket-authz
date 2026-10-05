@@ -12,14 +12,18 @@ import (
 	"github.com/tanjed/bus2/authz/internal/health"
 )
 
-// Health implements HealthService: the readiness check, on both listeners.
+// Health implements HealthService: the kubelet's liveness and readiness probes.
 type Health struct {
 	authzv1connect.UnimplementedHealthServiceHandler
 	Checker health.Checker
 	Log     *slog.Logger
 }
 
-func (s *Health) Check(ctx context.Context, _ *authzv1.CheckRequest) (*authzv1.CheckResponse, error) {
+func (s *Health) Live(context.Context, *authzv1.LiveRequest) (*authzv1.LiveResponse, error) {
+	return &authzv1.LiveResponse{}, nil
+}
+
+func (s *Health) Ready(ctx context.Context, _ *authzv1.ReadyRequest) (*authzv1.ReadyResponse, error) {
 	var ok, failed []string
 	for _, c := range s.Checker.Check(ctx) {
 		if c.Err != nil {
@@ -33,5 +37,5 @@ func (s *Health) Check(ctx context.Context, _ *authzv1.CheckRequest) (*authzv1.C
 		// Names only: the public listener answers this too.
 		return nil, withReason(connect.CodeUnavailable, "unhealthy", "unavailable: "+strings.Join(failed, ", "))
 	}
-	return &authzv1.CheckResponse{Components: ok}, nil
+	return &authzv1.ReadyResponse{Components: ok}, nil
 }

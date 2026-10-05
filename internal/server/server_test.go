@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"connectrpc.com/grpchealth"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -27,9 +26,9 @@ import (
 	"github.com/tanjed/bus2/authz/internal/bundle"
 	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/health"
-	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -70,8 +69,8 @@ func newStack(t *testing.T) stack {
 	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, time.Hour)
 	bundles := &bundle.Server{Src: svc, Hub: bundle.NewHub(), Signer: testSigner(t), MaxWait: time.Second, Log: log}
 	h, err := build(Params{
-		Admin:    &rpcapi.Admin{Svc: svc, Log: log},
-		Internal: &rpcapi.Internal{Svc: svc, Log: log},
+		Admin:      &rpcapi.Admin{Svc: svc, Log: log},
+		Internal:   &rpcapi.Internal{Svc: svc, Log: log},
 		Bundle:     rpcapi.NewBundle(bundles, log),
 		Health:     rpcapi.NewHealth(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log),
 		OPABundles: bundles,
@@ -144,7 +143,7 @@ func TestREST_InternalFlow(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, code)
 	require.Equal(t, "not_a_member", body["error"], "the domain reason survives to REST")
 
-	code, _ = do(t, s.h.internal, "GET", "/healthz", "", nil)
+	code, _ = do(t, s.h.internal, "GET", "/ready", "", nil)
 	require.Equal(t, http.StatusOK, code)
 	code, _ = do(t, s.h.internal, "GET", "/bundles/catalogue.tar.gz", "", nil)
 	require.Equal(t, http.StatusOK, code)
@@ -255,38 +254,43 @@ func TestConnect_JSONKeepsItsOwnErrors(t *testing.T) {
 
 func TestHealth(t *testing.T) {
 	s := newStack(t)
+	ctx := context.Background()
 	for _, url := range []string{s.publicURL, s.internalURL} {
-		res, err := grpchealth.NewClient(s.client, url, connect.WithGRPC()).Check(context.Background(), &grpchealth.CheckRequest{})
+		client := authzv1connect.NewHealthServiceClient(s.client, url, connect.WithGRPC())
+		_, err := client.Live(ctx, &authzv1.LiveRequest{})
 		require.NoError(t, err, url)
-		require.Equal(t, grpchealth.StatusServing, res.Status)
-
-		hs, err := authzv1connect.NewHealthServiceClient(s.client, url, connect.WithGRPC()).Check(context.Background(), &authzv1.CheckRequest{})
+		res, err := client.Ready(ctx, &authzv1.ReadyRequest{})
 		require.NoError(t, err, url)
-		require.Equal(t, []string{"db"}, hs.GetComponents())
+		require.Equal(t, []string{"db"}, res.GetComponents())
 	}
 	for _, h := range []http.Handler{s.h.public, s.h.internal} {
-		code, body := do(t, h, "GET", "/healthz", "", nil)
+		code, _ := do(t, h, "GET", "/live", "", nil)
+		require.Equal(t, http.StatusOK, code)
+		code, body := do(t, h, "GET", "/ready", "", nil)
 		require.Equal(t, http.StatusOK, code)
 		require.Equal(t, []any{"db"}, body["components"])
 	}
 }
 
-// A failed probe: 503 on REST (the readiness probe reads the status), UNAVAILABLE on RPC, and the
-// message names the component without its error.
+// A failed probe: not ready (503 on REST, UNAVAILABLE on RPC, the message naming the component
+// without its error), but still live, so the kubelet does not restart pods over a database outage.
 func TestHealth_Unavailable(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	down := health.New([]health.Probe{{Name: "db", Check: func(context.Context) error { return fmt.Errorf("dial tcp 10.0.0.5:5432: refused") }}})
 	h, err := build(Params{Admin: &rpcapi.Admin{}, Internal: &rpcapi.Internal{}, Bundle: &rpcapi.Bundle{}, Health: rpcapi.NewHealth(down, log), Log: log})
 	require.NoError(t, err)
 
-	code, body := do(t, h.internal, "GET", "/healthz", "", nil)
+	code, body := do(t, h.internal, "GET", "/ready", "", nil)
 	require.Equal(t, http.StatusServiceUnavailable, code)
 	require.Equal(t, map[string]any{"error": "unhealthy", "message": "unavailable: db"}, body)
 
 	connectJSON := map[string]string{"Content-Type": "application/json", "Connect-Protocol-Version": "1"}
-	code, body = do(t, h.public, "POST", "/bus.authz.v1.HealthService/Check", `{}`, connectJSON)
+	code, body = do(t, h.public, "POST", "/bus.authz.v1.HealthService/Ready", `{}`, connectJSON)
 	require.Equal(t, http.StatusServiceUnavailable, code)
 	require.Equal(t, "unavailable", body["code"])
+
+	code, _ = do(t, h.internal, "GET", "/live", "", nil)
+	require.Equal(t, http.StatusOK, code)
 }
 
 func TestBundleService(t *testing.T) {

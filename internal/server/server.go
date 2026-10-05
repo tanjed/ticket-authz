@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/grpchealth"
-	"connectrpc.com/grpcreflect"
 	"go.uber.org/fx"
 
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
@@ -50,18 +48,6 @@ func build(p Params) (handlers, error) {
 		return handlers{}, err
 	}
 	return handlers{public: pub, internal: in}, nil
-}
-
-// extras: the standard health service (the kubelet's liveness probe) and reflection (grpcurl,
-// buf curl), each listing only the zone's own services.
-func extras(services ...string) map[string]http.Handler {
-	out := map[string]http.Handler{}
-	add := func(path string, h http.Handler) { out[path] = h }
-	add(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))
-	reflector := grpcreflect.NewStaticReflector(services...)
-	add(grpcreflect.NewHandlerV1(reflector))
-	add(grpcreflect.NewHandlerV1Alpha(reflector))
-	return out
 }
 
 // Servers are the two listeners.

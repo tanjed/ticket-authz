@@ -6,19 +6,27 @@ import "google/api/annotations.proto";
 
 option go_package = "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1";
 
-// HealthService reports whether Authz can serve: every dependency it needs, checked live. Served
-// on both listeners; the kubelet's readiness probe reads GET /healthz on the internal one.
+// HealthService is the kubelet's probes, served on both listeners (the chart probes the internal
+// one).
 service HealthService {
-  // UNAVAILABLE (REST: 503) when any component is down, so a plain HTTP probe reads the status
-  // alone. The message names the failed components, never their errors (those are logged).
-  rpc Check(CheckRequest) returns (CheckResponse) {
-    option (google.api.http) = {get: "/healthz"};
+  // Liveness: the process answers. Checks no dependency, so a database outage never restarts pods.
+  rpc Live(LiveRequest) returns (LiveResponse) {
+    option (google.api.http) = {get: "/live"};
+  }
+  // Readiness: every dependency checked live. UNAVAILABLE (REST: 503) when any is down, so the
+  // pod leaves rotation; the message names the failed components, never their errors (logged).
+  rpc Ready(ReadyRequest) returns (ReadyResponse) {
+    option (google.api.http) = {get: "/ready"};
   }
 }
 
-message CheckRequest {}
+message LiveRequest {}
 
-message CheckResponse {
+message LiveResponse {}
+
+message ReadyRequest {}
+
+message ReadyResponse {
   // The components checked, all healthy (e.g. "db").
   repeated string components = 1;
 }

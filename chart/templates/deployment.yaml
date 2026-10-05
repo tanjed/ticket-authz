@@ -31,9 +31,10 @@ spec:
             - { name: AUTHZ_BUNDLE_SIGNING_KEY_ID, value: {{ required "bundleSigning.keyId is required (see helmvars/)" .Values.bundleSigning.keyId | quote }} }
           volumeMounts:
             - { name: bundle-signing, mountPath: /keys, readOnly: true }
-          readinessProbe: { httpGet: { path: /healthz, port: internal } }
-          # The standard gRPC health service, over cleartext HTTP/2 on the internal port.
-          livenessProbe: { grpc: { port: 8081 }, initialDelaySeconds: 10 }
+          # HealthService: liveness checks no dependency (a database outage never restarts pods),
+          # readiness checks them all.
+          readinessProbe: { httpGet: { path: /ready, port: internal } }
+          livenessProbe: { httpGet: { path: /live, port: internal }, initialDelaySeconds: 10 }
           resources: {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: bundle-signing

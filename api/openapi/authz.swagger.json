@@ -15,7 +15,7 @@
     },
     {
       "name": "HealthService",
-      "description": "HealthService reports whether Authz can serve: every dependency it needs, checked live. Served\non both listeners; the kubelet's readiness probe reads GET /healthz on the internal one."
+      "description": "HealthService is the kubelet's probes, served on both listeners (the chart probes the internal\none)."
     },
     {
       "name": "InternalService",
@@ -29,29 +29,6 @@
     "application/json"
   ],
   "paths": {
-    "/healthz": {
-      "get": {
-        "summary": "UNAVAILABLE (REST: 503) when any component is down, so a plain HTTP probe reads the status\nalone. The message names the failed components, never their errors (those are logged).",
-        "operationId": "HealthService_Check",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1CheckResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "tags": [
-          "HealthService"
-        ]
-      }
-    },
     "/internal/v1/bundles": {
       "get": {
         "summary": "Every bundle with its current revision.",
@@ -315,6 +292,52 @@
         ],
         "tags": [
           "InternalService"
+        ]
+      }
+    },
+    "/live": {
+      "get": {
+        "summary": "Liveness: the process answers. Checks no dependency, so a database outage never restarts pods.",
+        "operationId": "HealthService_Live",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LiveResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HealthService"
+        ]
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Readiness: every dependency checked live. UNAVAILABLE (REST: 503) when any is down, so the\npod leaves rotation; the message names the failed components, never their errors (logged).",
+        "operationId": "HealthService_Ready",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ReadyResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HealthService"
         ]
       }
     },
@@ -759,18 +782,6 @@
         }
       }
     },
-    "v1CheckResponse": {
-      "type": "object",
-      "properties": {
-        "components": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "The components checked, all healthy (e.g. \"db\")."
-        }
-      }
-    },
     "v1CompanyStatus": {
       "type": "string",
       "enum": [
@@ -1011,6 +1022,9 @@
         }
       }
     },
+    "v1LiveResponse": {
+      "type": "object"
+    },
     "v1ManifestPermission": {
       "type": "object",
       "properties": {
@@ -1076,6 +1090,18 @@
         }
       },
       "description": "A catalogue entry: resource:action, seeded by the service that owns it."
+    },
+    "v1ReadyResponse": {
+      "type": "object",
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The components checked, all healthy (e.g. \"db\")."
+        }
+      }
     },
     "v1RemoveMemberResponse": {
       "type": "object"

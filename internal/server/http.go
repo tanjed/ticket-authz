@@ -2,7 +2,6 @@ package server
 
 import (
 	"net/http"
-	"strings"
 
 	"connectrpc.com/vanguard"
 	"github.com/go-chi/chi/v5"
@@ -55,8 +54,7 @@ func (zs zones) Handle(pattern string, h http.Handler) {
 }
 
 // router builds the zone's handler. Each service's RPC path goes to the transcoder as it is
-// (Connect, gRPC, gRPC-Web keep their own errors); health and reflection list only the zone's
-// services; every other path is REST (the transcoder matches the google.api.http annotations,
+// (Connect, gRPC, gRPC-Web keep their own errors); every other path is REST (the transcoder matches the google.api.http annotations,
 // unknown paths are 404) behind restErrors. The hand-written handlers come first in chi's
 // matching, being more specific than the REST catch-all.
 func (z *zone) router() (http.Handler, error) {
@@ -70,10 +68,8 @@ func (z *zone) router() (http.Handler, error) {
 	}
 
 	vs := make([]*vanguard.Service, 0, len(z.services))
-	names := make([]string, 0, len(z.services))
 	for _, s := range z.services {
 		vs = append(vs, vanguard.NewService(s.path, s.handler))
-		names = append(names, strings.Trim(s.path, "/"))
 	}
 	tc, err := newTranscoder(vs...)
 	if err != nil {
@@ -81,9 +77,6 @@ func (z *zone) router() (http.Handler, error) {
 	}
 	for _, s := range z.services {
 		r.Handle(s.path+"*", tc)
-	}
-	for path, h := range extras(names...) {
-		r.Handle(path+"*", h)
 	}
 	r.Handle("/*", restErrors(tc))
 	return r, nil

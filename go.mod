@@ -4,8 +4,6 @@ go 1.26.5
 
 require (
 	connectrpc.com/connect v1.21.0
-	connectrpc.com/grpchealth v1.5.0
-	connectrpc.com/grpcreflect v1.3.1
 	connectrpc.com/vanguard v0.4.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/uuid v1.6.0

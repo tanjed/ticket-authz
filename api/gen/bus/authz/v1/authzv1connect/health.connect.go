@@ -33,15 +33,19 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// HealthServiceCheckProcedure is the fully-qualified name of the HealthService's Check RPC.
-	HealthServiceCheckProcedure = "/bus.authz.v1.HealthService/Check"
+	// HealthServiceLiveProcedure is the fully-qualified name of the HealthService's Live RPC.
+	HealthServiceLiveProcedure = "/bus.authz.v1.HealthService/Live"
+	// HealthServiceReadyProcedure is the fully-qualified name of the HealthService's Ready RPC.
+	HealthServiceReadyProcedure = "/bus.authz.v1.HealthService/Ready"
 )
 
 // HealthServiceClient is a client for the bus.authz.v1.HealthService service.
 type HealthServiceClient interface {
-	// UNAVAILABLE (REST: 503) when any component is down, so a plain HTTP probe reads the status
-	// alone. The message names the failed components, never their errors (those are logged).
-	Check(context.Context, *v1.CheckRequest) (*v1.CheckResponse, error)
+	// Liveness: the process answers. Checks no dependency, so a database outage never restarts pods.
+	Live(context.Context, *v1.LiveRequest) (*v1.LiveResponse, error)
+	// Readiness: every dependency checked live. UNAVAILABLE (REST: 503) when any is down, so the
+	// pod leaves rotation; the message names the failed components, never their errors (logged).
+	Ready(context.Context, *v1.ReadyRequest) (*v1.ReadyResponse, error)
 }
 
 // NewHealthServiceClient constructs a client for the bus.authz.v1.HealthService service. By
@@ -55,10 +59,16 @@ func NewHealthServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	healthServiceMethods := v1.File_bus_authz_v1_health_proto.Services().ByName("HealthService").Methods()
 	return &healthServiceClient{
-		check: connect.NewClient[v1.CheckRequest, v1.CheckResponse](
+		live: connect.NewClient[v1.LiveRequest, v1.LiveResponse](
 			httpClient,
-			baseURL+HealthServiceCheckProcedure,
-			connect.WithSchema(healthServiceMethods.ByName("Check")),
+			baseURL+HealthServiceLiveProcedure,
+			connect.WithSchema(healthServiceMethods.ByName("Live")),
+			connect.WithClientOptions(opts...),
+		),
+		ready: connect.NewClient[v1.ReadyRequest, v1.ReadyResponse](
+			httpClient,
+			baseURL+HealthServiceReadyProcedure,
+			connect.WithSchema(healthServiceMethods.ByName("Ready")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -66,12 +76,22 @@ func NewHealthServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // healthServiceClient implements HealthServiceClient.
 type healthServiceClient struct {
-	check *connect.Client[v1.CheckRequest, v1.CheckResponse]
+	live  *connect.Client[v1.LiveRequest, v1.LiveResponse]
+	ready *connect.Client[v1.ReadyRequest, v1.ReadyResponse]
 }
 
-// Check calls bus.authz.v1.HealthService.Check.
-func (c *healthServiceClient) Check(ctx context.Context, req *v1.CheckRequest) (*v1.CheckResponse, error) {
-	response, err := c.check.CallUnary(ctx, connect.NewRequest(req))
+// Live calls bus.authz.v1.HealthService.Live.
+func (c *healthServiceClient) Live(ctx context.Context, req *v1.LiveRequest) (*v1.LiveResponse, error) {
+	response, err := c.live.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Ready calls bus.authz.v1.HealthService.Ready.
+func (c *healthServiceClient) Ready(ctx context.Context, req *v1.ReadyRequest) (*v1.ReadyResponse, error) {
+	response, err := c.ready.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -80,9 +100,11 @@ func (c *healthServiceClient) Check(ctx context.Context, req *v1.CheckRequest) (
 
 // HealthServiceHandler is an implementation of the bus.authz.v1.HealthService service.
 type HealthServiceHandler interface {
-	// UNAVAILABLE (REST: 503) when any component is down, so a plain HTTP probe reads the status
-	// alone. The message names the failed components, never their errors (those are logged).
-	Check(context.Context, *v1.CheckRequest) (*v1.CheckResponse, error)
+	// Liveness: the process answers. Checks no dependency, so a database outage never restarts pods.
+	Live(context.Context, *v1.LiveRequest) (*v1.LiveResponse, error)
+	// Readiness: every dependency checked live. UNAVAILABLE (REST: 503) when any is down, so the
+	// pod leaves rotation; the message names the failed components, never their errors (logged).
+	Ready(context.Context, *v1.ReadyRequest) (*v1.ReadyResponse, error)
 }
 
 // NewHealthServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -92,16 +114,24 @@ type HealthServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewHealthServiceHandler(svc HealthServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	healthServiceMethods := v1.File_bus_authz_v1_health_proto.Services().ByName("HealthService").Methods()
-	healthServiceCheckHandler := connect.NewUnaryHandlerSimple(
-		HealthServiceCheckProcedure,
-		svc.Check,
-		connect.WithSchema(healthServiceMethods.ByName("Check")),
+	healthServiceLiveHandler := connect.NewUnaryHandlerSimple(
+		HealthServiceLiveProcedure,
+		svc.Live,
+		connect.WithSchema(healthServiceMethods.ByName("Live")),
+		connect.WithHandlerOptions(opts...),
+	)
+	healthServiceReadyHandler := connect.NewUnaryHandlerSimple(
+		HealthServiceReadyProcedure,
+		svc.Ready,
+		connect.WithSchema(healthServiceMethods.ByName("Ready")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/bus.authz.v1.HealthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case HealthServiceCheckProcedure:
-			healthServiceCheckHandler.ServeHTTP(w, r)
+		case HealthServiceLiveProcedure:
+			healthServiceLiveHandler.ServeHTTP(w, r)
+		case HealthServiceReadyProcedure:
+			healthServiceReadyHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -111,6 +141,10 @@ func NewHealthServiceHandler(svc HealthServiceHandler, opts ...connect.HandlerOp
 // UnimplementedHealthServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedHealthServiceHandler struct{}
 
-func (UnimplementedHealthServiceHandler) Check(context.Context, *v1.CheckRequest) (*v1.CheckResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.HealthService.Check is not implemented"))
+func (UnimplementedHealthServiceHandler) Live(context.Context, *v1.LiveRequest) (*v1.LiveResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.HealthService.Live is not implemented"))
+}
+
+func (UnimplementedHealthServiceHandler) Ready(context.Context, *v1.ReadyRequest) (*v1.ReadyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.HealthService.Ready is not implemented"))
 }
