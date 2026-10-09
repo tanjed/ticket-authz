@@ -1,11 +1,11 @@
 # Authz
 
-Authorization for the Bus 2.0 platform. It owns the **permission catalogue** (seeded by each service), **company roles** and **who holds which role**, and publishes all of it as **OPA bundles** that the APISIX gateway (`../APISIX`) decides every request from. Authz is never on the request path: it is called at login (by the IdP) and when roles change.
+Authorization for the Bus 2.0 platform. It owns the **permission catalogue** (seeded by each service), **company roles** and **who holds which role**, and writes all of it to the **gateway view** in Redis: Authz writes the master, the APISIX gateway (`../APISIX`) reads a replica and decides every request from it. Authz is never on the request path: it is called at login (by the IdP) and when roles change.
 
 ```
-login:    IdP ──(provider client)──► Authz GetClaims ──► JWT { sub, user_type, company_id, roles }
-request:  client ─► APISIX ─► OPA sidecar (verifies the JWT, decides from bundles) ─► service
-bundles:  OPA ◄── long poll ── Authz   (discovery, catalogue + policy, consumer, one per company)
+login:    IdP ──(provider client)──► Authz GetClaims ──► JWT { sub, user_type, company_id, roles, authz_version }
+request:  client ─► APISIX (verifies the JWT, decides from the Redis replica) ─► service
+writes:   Authz ── after each commit ──► Redis master ──► replica (the gateway's)
 seeding:  service deploy Job ── ApplyManifest ──► Authz (permissions + APISIX route map)
 ```
 
@@ -21,7 +21,7 @@ Defined in `proto/bus/authz/v1`. The services are [Connect](https://connectrpc.c
 | Listener | Port | Reachable from | Serves |
 |---|---|---|---|
 | public | `:8080` | APISIX only | `AdminService` (roles, members, invitations), `HealthService` |
-| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `BundleService` (list and fetch the signed bundles), `HealthService`, `/bundles/*` (OPA's download) |
+| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `HealthService` |
 
 `HealthService` is the kubelet's probes: `GET /live` (liveness: the process answers, no dependency checked, so a DB outage never restarts pods) and `GET /ready` (readiness: pings every dependency; 503 / `UNAVAILABLE` naming the failed ones). No gRPC health or server reflection: tools read the schema from `proto/` (`buf curl --schema .`, `grpcurl -import-path proto -proto ...`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
 
@@ -30,7 +30,9 @@ buf curl --schema . --protocol grpc --http2-prior-knowledge -d '{"sub":"u1"}' ht
 curl localhost:8091/internal/v1/subjects/u1/claims
 ```
 
-Every OPA bundle is signed (RS256, OPA's own bundle format); the gateway's OPA refuses one it cannot verify.
+## The gateway view (Redis)
+
+The key contract the gateway reads, and its decision, are in `docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md`. In short: `authz:routes` (route → permission or `public`), `authz:consumer`, `authz:company:<id>` (status), `authz:company:<id>:role:<id>` (permissions, `*` for the admin role), `authz:user:<sub>:version`. A provider token whose `authz_version` differs from the view is refused (`401 token_stale`): the client refreshes it. Role permission edits and suspensions apply at once without a refresh. Each write updates its keys after commit; every boot rebuilds the whole view.
 
 ## Seeding a service
 
@@ -45,16 +47,16 @@ curl -X PUT http://authz:8081/internal/v1/manifests/order -H 'content-type: appl
 
 ## Quick start (local)
 
-Needs Go, Docker and `make`. Runs on the `shohoz` network with `../IdP` and `../APISIX`.
+Needs Go, Docker and `make`. Runs on the `shohoz` network with `../Infra` (Redis), `../IdP` and `../APISIX`.
 
 ```sh
 make tools generate   # pinned buf + plugins into ./bin, regenerate api/ (only after editing proto/)
-make test             # Go tests; the rbac and server tests start a Postgres container
-make test-policy      # opa test for the gateway policy
+make test             # Go tests; the rbac and server tests start a Postgres container (Redis: miniredis)
+(cd ../Infra && docker compose up -d)
 docker compose up -d --build
 ```
 
-Local ports (loopback): public 8090, internal 8091 (every protocol on each); Postgres 5433. The first `docker compose up` creates a dev bundle signing key pair in `dev-keys/` (gitignored); `../APISIX`'s OPA reads its public half from there. `make seed SERVICE=... FILE=...` seeds a manifest.
+Local ports (loopback): public 8090, internal 8091 (every protocol on each); Postgres 5433. `make seed SERVICE=... FILE=...` seeds a manifest.
 
 ## Configuration
 
@@ -63,24 +65,23 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 | `AUTHZ_DATABASE_URL` | Postgres (required) |
 | `AUTHZ_PUBLIC_ADDR` | Public listener (`:8080`) |
 | `AUTHZ_INTERNAL_ADDR` | Internal listener (`:8081`) |
-| `AUTHZ_BUNDLE_SIGNING_KEY_FILE`, `AUTHZ_BUNDLE_SIGNING_KEY_ID` | RSA private key (PEM) every bundle is signed with, and the key id OPA knows its public half by (both required) |
+| `AUTHZ_REDIS_URL` | The Redis master the gateway view is written to (required) |
 | `AUTHZ_IDP_INTERNAL_URL` | The IdP UI's cluster-internal URL (invitations; required for `serve`) |
 | `AUTHZ_KAFKA_BROKERS`, `AUTHZ_KAFKA_TOPIC` | Events (`authz.events`); no brokers: events are only logged |
-| `AUTHZ_BUNDLE_SERVICE`, `AUTHZ_LONG_POLL_SECONDS` | What discovery tells OPA (service name `authz`, 30 s) |
 | `AUTHZ_INVITE_TTL` | Invitation lifetime (`168h`) |
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `cmd/authz` | Entry point: migrations, own manifest, then serve |
+| `cmd/authz` | Entry point: migrations, own manifest, gateway view rebuild, then serve |
 | `proto/`, `api/` | API definitions; generated Go (messages, Connect handlers and clients) and OpenAPI (committed) |
 | `internal/ioc` | Assembles the app from each package's `fx.Module` (`module.go`) |
 | `internal/rbac` | the domain and its SQL |
 | `internal/rpcapi` | proto service implementations (Connect handlers) |
 | `internal/server` | Vanguard transcoders, chi routers, the two listeners |
-| `internal/bundle` | OPA bundles: signed tarballs (OPA's bundle package), long polling |
-| `policy/` | the gateway's rego policy (shipped in the catalogue bundle) and its tests |
+| `internal/redisview` | the gateway view in Redis (the key contract) |
+| `internal/health` | readiness probes (each dependency's package contributes one) |
 | `manifest/` | Authz's own manifest (its admin API routes), seeded at startup |
 | `migrations/` | goose SQL |
 | `chart/`, `helmvars/` | Helm chart (Deployment, Service, NetworkPolicy, ApisixRoute, Postgres) |
@@ -92,6 +93,6 @@ make lint template
 helm upgrade --install authz chart -f helmvars/dev.yaml
 ```
 
-Pre-created Secrets `authz-postgres` (keys `password`, `url`) and `authz-bundle-signing` (key `private.pem`, RSA); the chart creates no secrets. Set `bundleSigning.keyId` in helmvars, and give `../APISIX` the public half under the same id (`opa.bundleSigning`). To rotate: add the new public key to OPA under a new id, then switch the Secret and `bundleSigning.keyId`. Authz applies its migrations on every start (advisory lock: replicas starting together are safe).
+Pre-created Secrets `authz-postgres` (keys `password`, `url`) and `authz-redis` (key `url`, the platform's Redis master); the chart creates no secrets. Authz applies its migrations on every start (advisory lock: replicas starting together are safe).
 
-Design: `docs/superpowers/specs/2026-09-29-authz-service-design.md`; transport and bundle signing: `docs/superpowers/specs/2026-10-01-connect-vanguard-signed-bundles-design.md`.
+Design: `docs/superpowers/specs/2026-09-29-authz-service-design.md`; transport: `docs/superpowers/specs/2026-10-01-connect-vanguard-signed-bundles-design.md`; the Redis gateway view (replaces OPA): `docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md`.

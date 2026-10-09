@@ -7,7 +7,7 @@ import "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 // passed as is; its REST paths come from its google.api.http annotations.
 //
 // Trust zones: AdminService only public (it trusts the gateway's X-Bus-* headers);
-// InternalService and the bundles only internal.
+// InternalService only internal.
 func wire(p Params) (public, internal *zone) {
 	opts := handlerOptions(p.Log)
 	public, internal = newZone(), newZone()
@@ -15,10 +15,6 @@ func wire(p Params) (public, internal *zone) {
 
 	public.Service(authzv1connect.NewAdminServiceHandler(p.Admin, opts...))
 	internal.Service(authzv1connect.NewInternalServiceHandler(p.Internal, opts...))
-	internal.Service(authzv1connect.NewBundleServiceHandler(p.Bundle, opts...))
 	both.Service(authzv1connect.NewHealthServiceHandler(p.Health, opts...)) // GET /live, /ready
-
-	// OPA's bundle download: ETag, long polling and 304, which an RPC cannot speak.
-	internal.Handle("GET /bundles/*", p.OPABundles)
 	return public, internal
 }

@@ -2,19 +2,23 @@ package rbac_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tanjed/bus2/authz/internal/catalogue"
 	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/redisview"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -87,6 +91,7 @@ type env struct {
 	svc *rbac.Service
 	ev  *fakeEvents
 	idp *fakeIdP
+	rdb *redis.Client // the gateway view, read back as the gateway would
 	ctx context.Context
 }
 
@@ -96,7 +101,9 @@ func newService(t *testing.T) env {
 	ctx := context.Background()
 	testdb.Reset(t, pool)
 	ev, fi := &fakeEvents{}, &fakeIdP{byPhone: map[string]string{}}
-	return env{svc: rbac.New(pool, ev, fi, 7*24*time.Hour), ev: ev, idp: fi, ctx: ctx}
+	rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+	view := &redisview.Redis{C: rdb}
+	return env{svc: rbac.New(pool, ev, fi, view, 7*24*time.Hour), ev: ev, idp: fi, rdb: rdb, ctx: ctx}
 }
 
 // seed loads a small "order" catalogue.
@@ -127,12 +134,23 @@ func (e env) company(t *testing.T, name string) (string, rbac.Caller) {
 	return id, rbac.Caller{Sub: "admin-" + name, CompanyID: id}
 }
 
-func (e env) revision(t *testing.T, name string) int64 {
+// hash reads a HASH of the gateway view (empty when the key is absent).
+func (e env) hash(t *testing.T, key string) map[string]string {
 	t.Helper()
-	rev, ok, err := e.svc.BundleRevision(e.ctx, name)
+	h, err := e.rdb.HGetAll(e.ctx, key).Result()
 	require.NoError(t, err)
-	require.True(t, ok, "bundle %s", name)
-	return rev
+	return h
+}
+
+// version reads a member's authorization version from the gateway view; 0 when absent.
+func (e env) version(t *testing.T, sub string) int64 {
+	t.Helper()
+	v, err := e.rdb.Get(e.ctx, redisview.UserVersionKey(sub)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return 0
+	}
+	require.NoError(t, err)
+	return v
 }
 
 func requireStatus(t *testing.T, err error, kind rbac.Kind, code string) {

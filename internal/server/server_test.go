@@ -2,11 +2,7 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,16 +14,18 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
-	"github.com/tanjed/bus2/authz/internal/bundle"
 	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/redisview"
 	"github.com/tanjed/bus2/authz/internal/rpcapi"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
@@ -66,15 +64,12 @@ func newStack(t *testing.T) stack {
 	t.Helper()
 	testdb.Reset(t, pool)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, time.Hour)
-	bundles := &bundle.Server{Src: svc, Hub: bundle.NewHub(), Signer: testSigner(t), MaxWait: time.Second, Log: log}
+	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, &redisview.Redis{C: redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})}, time.Hour)
 	h, err := build(Params{
-		Admin:      &rpcapi.Admin{Svc: svc, Log: log},
-		Internal:   &rpcapi.Internal{Svc: svc, Log: log},
-		Bundle:     rpcapi.NewBundle(bundles, log),
-		Health:     rpcapi.NewHealth(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log),
-		OPABundles: bundles,
-		Log:        log,
+		Admin:    &rpcapi.Admin{Svc: svc, Log: log},
+		Internal: &rpcapi.Internal{Svc: svc, Log: log},
+		Health:   rpcapi.NewHealth(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log),
+		Log:      log,
 	})
 	require.NoError(t, err)
 	serve := func(h http.Handler) string {
@@ -88,15 +83,6 @@ func newStack(t *testing.T) stack {
 	protocols.SetUnencryptedHTTP2(true)
 	return stack{h: h, publicURL: serve(h.public), internalURL: serve(h.internal),
 		client: &http.Client{Transport: &http.Transport{Protocols: protocols}}}
-}
-
-func testSigner(t *testing.T) *bundle.Signer {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	s, err := bundle.NewSigner(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), "test")
-	require.NoError(t, err)
-	return s
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string, headers map[string]string) (int, map[string]any) {
@@ -144,8 +130,6 @@ func TestREST_InternalFlow(t *testing.T) {
 	require.Equal(t, "not_a_member", body["error"], "the domain reason survives to REST")
 
 	code, _ = do(t, s.h.internal, "GET", "/ready", "", nil)
-	require.Equal(t, http.StatusOK, code)
-	code, _ = do(t, s.h.internal, "GET", "/bundles/catalogue.tar.gz", "", nil)
 	require.Equal(t, http.StatusOK, code)
 	code, _ = do(t, s.h.internal, "GET", "/v1/roles", "", nil)
 	require.Equal(t, http.StatusNotFound, code, "the admin API is not on the internal listener")
@@ -277,7 +261,7 @@ func TestHealth(t *testing.T) {
 func TestHealth_Unavailable(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	down := health.New([]health.Probe{{Name: "db", Check: func(context.Context) error { return fmt.Errorf("dial tcp 10.0.0.5:5432: refused") }}})
-	h, err := build(Params{Admin: &rpcapi.Admin{}, Internal: &rpcapi.Internal{}, Bundle: &rpcapi.Bundle{}, Health: rpcapi.NewHealth(down, log), Log: log})
+	h, err := build(Params{Admin: &rpcapi.Admin{}, Internal: &rpcapi.Internal{}, Health: rpcapi.NewHealth(down, log), Log: log})
 	require.NoError(t, err)
 
 	code, body := do(t, h.internal, "GET", "/ready", "", nil)
@@ -291,47 +275,4 @@ func TestHealth_Unavailable(t *testing.T) {
 
 	code, _ = do(t, h.internal, "GET", "/live", "", nil)
 	require.Equal(t, http.StatusOK, code)
-}
-
-func TestBundleService(t *testing.T) {
-	s := newStack(t)
-	ctx := context.Background()
-	client := authzv1connect.NewBundleServiceClient(s.client, s.internalURL, connect.WithGRPC())
-
-	list, err := client.ListBundles(ctx, &authzv1.ListBundlesRequest{})
-	require.NoError(t, err)
-	var names []string
-	for _, b := range list.GetBundles() {
-		names = append(names, b.GetName())
-	}
-	require.Contains(t, names, rbac.BundleCatalogue)
-
-	// The same bundle OPA downloads: its revision is OPA's ETag.
-	got, err := client.GetBundle(ctx, &authzv1.GetBundleRequest{Name: rbac.BundleCatalogue})
-	require.NoError(t, err)
-	require.NotEmpty(t, got.GetBody())
-	req := httptest.NewRequest("GET", "/bundles/catalogue.tar.gz", nil)
-	rec := httptest.NewRecorder()
-	s.h.internal.ServeHTTP(rec, req)
-	require.Equal(t, `"`+got.GetBundle().GetRevision()+`"`, rec.Header().Get("ETag"))
-
-	_, err = client.GetBundle(ctx, &authzv1.GetBundleRequest{Name: "nope"})
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	require.Equal(t, "bundle_not_found", rpcapi.Reason(err))
-
-	// REST, names with a slash included.
-	code, body := do(t, s.h.internal, "GET", "/internal/v1/bundles", "", nil)
-	require.Equal(t, http.StatusOK, code)
-	require.NotEmpty(t, body["bundles"])
-	code, body = do(t, s.h.internal, "GET", "/internal/v1/bundles/companies/00000000-0000-0000-0000-000000000000", "", nil)
-	require.Equal(t, http.StatusNotFound, code)
-	require.Equal(t, "bundle_not_found", body["error"])
-
-	// Internal only.
-	code, _ = do(t, s.h.public, "GET", "/internal/v1/bundles", "", nil)
-	require.Equal(t, http.StatusNotFound, code)
-	code, _ = do(t, s.h.public, "GET", "/bundles/catalogue.tar.gz", "", nil)
-	require.Equal(t, http.StatusNotFound, code)
-	_, err = authzv1connect.NewBundleServiceClient(s.client, s.publicURL, connect.WithGRPC()).ListBundles(ctx, &authzv1.ListBundlesRequest{})
-	require.Error(t, err, "BundleService is not on the public listener")
 }

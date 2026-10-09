@@ -40,7 +40,7 @@ func (s *Internal) GetClaims(ctx context.Context, req *authzv1.GetClaimsRequest)
 	if err != nil {
 		return nil, toError(s.Log, err)
 	}
-	out := &authzv1.GetClaimsResponse{CompanyId: c.CompanyID}
+	out := &authzv1.GetClaimsResponse{CompanyId: c.CompanyID, AuthzVersion: c.AuthzVersion}
 	for _, r := range c.Roles {
 		out.Roles = append(out.Roles, &authzv1.RoleRef{Id: r.ID, Name: r.Name, Version: int32(r.Version)})
 	}

@@ -188,7 +188,7 @@ func escalation() error {
 
 func (s *Service) CreateRole(ctx context.Context, c Caller, in RoleInput) (Role, error) {
 	var id string
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		p, err := callerPower(ctx, tx, c)
 		if err != nil {
 			return err
@@ -206,10 +206,9 @@ func (s *Service) CreateRole(ctx context.Context, c Caller, in RoleInput) (Role,
 			}
 			return err
 		}
-		if err := setRolePermissions(ctx, tx, id, in.Permissions); err != nil {
-			return err
-		}
-		return bump(ctx, tx, CompanyBundle(c.CompanyID))
+		return setRolePermissions(ctx, tx, id, in.Permissions)
+	}, func(ctx context.Context) error {
+		return s.putRole(ctx, c.CompanyID, id)
 	})
 	if err != nil {
 		return Role{}, err
@@ -221,7 +220,7 @@ func (s *Service) CreateRole(ctx context.Context, c Caller, in RoleInput) (Role,
 }
 
 func (s *Service) UpdateRole(ctx context.Context, c Caller, id string, in RoleInput) (Role, error) {
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		p, err := callerPower(ctx, tx, c)
 		if err != nil {
 			return err
@@ -248,10 +247,9 @@ func (s *Service) UpdateRole(ctx context.Context, c Caller, id string, in RoleIn
 		if _, err := tx.Exec(ctx, `DELETE FROM role_permissions WHERE role_id = $1`, id); err != nil {
 			return err
 		}
-		if err := setRolePermissions(ctx, tx, id, in.Permissions); err != nil {
-			return err
-		}
-		return bump(ctx, tx, CompanyBundle(c.CompanyID))
+		return setRolePermissions(ctx, tx, id, in.Permissions)
+	}, func(ctx context.Context) error {
+		return s.putRole(ctx, c.CompanyID, id)
 	})
 	if err != nil {
 		return Role{}, err
@@ -263,7 +261,7 @@ func (s *Service) UpdateRole(ctx context.Context, c Caller, id string, in RoleIn
 }
 
 func (s *Service) DeleteRole(ctx context.Context, c Caller, id string) error {
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		p, err := callerPower(ctx, tx, c)
 		if err != nil {
 			return err
@@ -285,10 +283,10 @@ func (s *Service) DeleteRole(ctx context.Context, c Caller, id string) error {
 		if inUse {
 			return fail(KindPrecondition, "role_in_use", "the role is still assigned; unassign it first")
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id); err != nil {
-			return err
-		}
-		return bump(ctx, tx, CompanyBundle(c.CompanyID))
+		_, err = tx.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
+		return err
+	}, func(ctx context.Context) error {
+		return s.View.DeleteRole(ctx, c.CompanyID, id)
 	})
 	if err != nil {
 		return err

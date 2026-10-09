@@ -1,5 +1,7 @@
 # Connect + Vanguard transport, signed OPA bundles
 
+> **Superseded (2026-10-06):** OPA and its bundles are gone. The gateway now decides from the Redis gateway view Authz writes, through APISIX's `bus-authz` plugin: see `2026-10-06-redis-gateway-view-design.md`. The OPA parts below are history.
+
 Date: 2026-10-01. Amends sections 6, 7 and 12 of `2026-09-29-authz-service-design.md`.
 
 ## 1. Goal

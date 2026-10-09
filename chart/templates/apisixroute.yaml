@@ -1,6 +1,6 @@
 {{- if .Values.apisixRoute.enabled }}
-# The admin API under api.<domain>/authz. Each rule's name is the route name OPA looks up in the
-# catalogue (manifest/authz.json). Authorization is the gateway's global opa rule; nothing here.
+# The admin API under api.<domain>/authz. Each rule's name is the route name the gateway looks up
+# in the gateway view (manifest/authz.json). Authorization is the gateway's global plugin; nothing here.
 # SPIKE (see ../APISIX spec): confirm the route name the ingress controller generates from this.
 {{- $rules := list
   (list "authz.permissions.list" "GET" "/authz/v1/permissions")

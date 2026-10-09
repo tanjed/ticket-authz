@@ -67,6 +67,6 @@ message Invitation {
 enum CompanyStatus {
   COMPANY_STATUS_UNSPECIFIED = 0;
   COMPANY_STATUS_ACTIVE = 1;
-  // Every request of the company's users is denied (within one bundle poll).
+  // Every request of the company's users is denied, at once.
   COMPANY_STATUS_SUSPENDED = 2;
 }

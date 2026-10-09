@@ -1,5 +1,5 @@
 # Authz applies its migrations on start (under a Postgres advisory lock, so replicas starting
-# together are safe), seeds its own manifest, then serves.
+# together are safe), seeds its own manifest, rebuilds the gateway view in Redis, then serves.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,27 +23,19 @@ spec:
           env:
             - name: AUTHZ_DATABASE_URL
               valueFrom: { secretKeyRef: { name: {{ .Values.secrets.postgres.name }}, key: url } }
+            - name: AUTHZ_REDIS_URL
+              valueFrom: { secretKeyRef: { name: {{ .Values.secrets.redis.name }}, key: url } }
             - { name: AUTHZ_IDP_INTERNAL_URL, value: {{ .Values.idpInternalUrl | quote }} }
             - { name: AUTHZ_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
             - { name: AUTHZ_KAFKA_TOPIC, value: {{ .Values.kafka.topic | quote }} }
-            - { name: AUTHZ_LONG_POLL_SECONDS, value: {{ .Values.longPollSeconds | quote }} }
-            - { name: AUTHZ_BUNDLE_SIGNING_KEY_FILE, value: /keys/bundle-signing.pem }
-            - { name: AUTHZ_BUNDLE_SIGNING_KEY_ID, value: {{ required "bundleSigning.keyId is required (see helmvars/)" .Values.bundleSigning.keyId | quote }} }
-          volumeMounts:
-            - { name: bundle-signing, mountPath: /keys, readOnly: true }
           # HealthService: liveness checks no dependency (a database outage never restarts pods),
           # readiness checks them all.
           readinessProbe: { httpGet: { path: /ready, port: internal } }
           livenessProbe: { httpGet: { path: /live, port: internal }, initialDelaySeconds: 10 }
           resources: {{- toYaml .Values.resources | nindent 12 }}
-      volumes:
-        - name: bundle-signing
-          secret:
-            secretName: {{ .Values.secrets.bundleSigning.name }}
-            items: [{ key: private.pem, path: bundle-signing.pem }]
 ---
 # One Service, two ports, each serving Connect, gRPC, gRPC-Web and REST (HTTP/1.1 and h2c):
-# public 8080 (gateway only), internal 8081 (OPA's boot config, the IdP, seed Jobs).
+# public 8080 (gateway only), internal 8081 (the IdP, seed Jobs).
 apiVersion: v1
 kind: Service
 metadata:

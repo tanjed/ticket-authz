@@ -1,5 +1,7 @@
 # Authz service design
 
+> **Superseded (2026-10-06):** OPA and its bundles are gone. The gateway now decides from the Redis gateway view Authz writes, through APISIX's `bus-authz` plugin: see `2026-10-06-redis-gateway-view-design.md`. The OPA parts below are history.
+
 Date: 2026-09-29. Status: approved in brainstorming; built in this round.
 
 Companion specs: `../APISIX/docs/superpowers/specs/2026-09-29-apisix-gateway-design.md` (gateway, OPA sidecar) and `../IdP/docs/superpowers/specs/2026-09-29-idp-authz-integration-design.md` (claims at login, company onboarding, staff invites).

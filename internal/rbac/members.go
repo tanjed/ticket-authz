@@ -36,7 +36,8 @@ func (s *Service) ListMembers(ctx context.Context, c Caller) ([]Member, error) {
 func (s *Service) SetMemberRoles(ctx context.Context, c Caller, sub string, roleIDs []string) error {
 	roleIDs = slices.Compact(slices.Sorted(slices.Values(roleIDs)))
 	var added, removed []string
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	var version int64
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		p, err := callerPower(ctx, tx, c)
 		if err != nil {
 			return err
@@ -83,7 +84,13 @@ func (s *Service) SetMemberRoles(ctx context.Context, c Caller, sub string, role
 		if _, err := tx.Exec(ctx, `INSERT INTO member_roles (sub, company_id, role_id) SELECT $1, $2, unnest($3::uuid[])`, sub, c.CompanyID, roleIDs); err != nil {
 			return err
 		}
-		return bump(ctx, tx, CompanyBundle(c.CompanyID))
+		// A new version: the gateway refuses the member's current token until they refresh it.
+		return tx.QueryRow(ctx, `UPDATE members SET authz_version = nextval('authz_versions') WHERE sub = $1 RETURNING authz_version`, sub).Scan(&version)
+	}, func(ctx context.Context) error {
+		if version == 0 {
+			return nil
+		}
+		return s.View.PutUserVersion(ctx, sub, version)
 	})
 	if err != nil || (len(added) == 0 && len(removed) == 0) {
 		return err
@@ -96,7 +103,7 @@ func (s *Service) SetMemberRoles(ctx context.Context, c Caller, sub string, role
 
 // RemoveMember takes a user out of the company (they may then join or create another).
 func (s *Service) RemoveMember(ctx context.Context, c Caller, sub string) error {
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		p, err := callerPower(ctx, tx, c)
 		if err != nil {
 			return err
@@ -117,10 +124,11 @@ func (s *Service) RemoveMember(ctx context.Context, c Caller, sub string) error 
 		if err := keepAnAdmin(ctx, tx, c.CompanyID, sub, held, current); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM members WHERE sub = $1`, sub); err != nil {
-			return err
-		}
-		return bump(ctx, tx, CompanyBundle(c.CompanyID))
+		_, err = tx.Exec(ctx, `DELETE FROM members WHERE sub = $1`, sub)
+		return err
+	}, func(ctx context.Context) error {
+		// No version: the gateway refuses every token of this subject.
+		return s.View.DeleteUser(ctx, sub)
 	})
 	if err != nil {
 		return err

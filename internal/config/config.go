@@ -3,7 +3,6 @@ package config
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -13,36 +12,28 @@ type Config struct {
 	// The public listener serves the company admin API (Connect, gRPC, gRPC-Web and REST). Only
 	// APISIX may reach it: it trusts the X-Bus-* headers the gateway sets.
 	PublicAddr string
-	// The internal listener serves the IdP, seed Jobs and OPA bundles. Never routed by the gateway.
+	// The internal listener serves the IdP and seed Jobs. Never routed by the gateway.
 	InternalAddr string
 	DatabaseURL  string
+	// RedisURL is the Redis master the gateway view is written to (the gateway reads a replica).
+	RedisURL string
 	// IdPInternalURL is the IdP UI's cluster-internal base URL (invitations).
 	IdPInternalURL string
 	KafkaBrokers   []string
 	KafkaTopic     string
-	// BundleService is the name OPA's boot config gives this service; discovery refers to it.
-	BundleService string
-	// LongPollSeconds is what discovery tells OPA to use for every bundle.
-	LongPollSeconds int
-	// BundleSigningKeyFile is the RSA private key (PEM) every bundle is signed with, and
-	// BundleSigningKeyID the name OPA's keys config gives its public half.
-	BundleSigningKeyFile string
-	BundleSigningKeyID   string
-	InviteTTL            time.Duration
+	InviteTTL      time.Duration
 }
 
 // Load reads configuration through getenv (pass os.Getenv in production).
 func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		PublicAddr:           orDefault(getenv("AUTHZ_PUBLIC_ADDR"), ":8080"),
-		InternalAddr:         orDefault(getenv("AUTHZ_INTERNAL_ADDR"), ":8081"),
-		DatabaseURL:          getenv("AUTHZ_DATABASE_URL"),
-		IdPInternalURL:       strings.TrimSuffix(getenv("AUTHZ_IDP_INTERNAL_URL"), "/"),
-		KafkaTopic:           orDefault(getenv("AUTHZ_KAFKA_TOPIC"), "authz.events"),
-		BundleService:        orDefault(getenv("AUTHZ_BUNDLE_SERVICE"), "authz"),
-		BundleSigningKeyFile: getenv("AUTHZ_BUNDLE_SIGNING_KEY_FILE"),
-		BundleSigningKeyID:   getenv("AUTHZ_BUNDLE_SIGNING_KEY_ID"),
-		InviteTTL:            7 * 24 * time.Hour,
+		PublicAddr:     orDefault(getenv("AUTHZ_PUBLIC_ADDR"), ":8080"),
+		InternalAddr:   orDefault(getenv("AUTHZ_INTERNAL_ADDR"), ":8081"),
+		DatabaseURL:    getenv("AUTHZ_DATABASE_URL"),
+		RedisURL:       getenv("AUTHZ_REDIS_URL"),
+		IdPInternalURL: strings.TrimSuffix(getenv("AUTHZ_IDP_INTERNAL_URL"), "/"),
+		KafkaTopic:     orDefault(getenv("AUTHZ_KAFKA_TOPIC"), "authz.events"),
+		InviteTTL:      7 * 24 * time.Hour,
 	}
 	for _, b := range strings.Split(getenv("AUTHZ_KAFKA_BROKERS"), ",") {
 		if b = strings.TrimSpace(b); b != "" {
@@ -51,9 +42,6 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	var err error
-	if cfg.LongPollSeconds, err = strconv.Atoi(orDefault(getenv("AUTHZ_LONG_POLL_SECONDS"), "30")); err != nil || cfg.LongPollSeconds < 1 {
-		return Config{}, fmt.Errorf("AUTHZ_LONG_POLL_SECONDS must be a positive integer")
-	}
 	if v := getenv("AUTHZ_INVITE_TTL"); v != "" {
 		if cfg.InviteTTL, err = time.ParseDuration(v); err != nil || cfg.InviteTTL <= 0 {
 			return Config{}, fmt.Errorf("AUTHZ_INVITE_TTL must be a positive duration like 168h")
@@ -65,9 +53,8 @@ func Load(getenv func(string) string) (Config, error) {
 	if cfg.IdPInternalURL == "" {
 		return Config{}, fmt.Errorf("AUTHZ_IDP_INTERNAL_URL is required")
 	}
-	// No unsigned mode: gateways only accept bundles signed with this key.
-	if cfg.BundleSigningKeyFile == "" || cfg.BundleSigningKeyID == "" {
-		return Config{}, fmt.Errorf("AUTHZ_BUNDLE_SIGNING_KEY_FILE and AUTHZ_BUNDLE_SIGNING_KEY_ID are required")
+	if cfg.RedisURL == "" {
+		return Config{}, fmt.Errorf("AUTHZ_REDIS_URL is required")
 	}
 	return cfg, nil
 }

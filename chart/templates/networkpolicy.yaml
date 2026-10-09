@@ -1,5 +1,5 @@
 # Public port 8080: only the gateway (it sets the X-Bus-* headers the admin API trusts).
-# Internal port 8081: in-cluster callers (IdP, seed Jobs, OPA sidecars). Each port serves every
+# Internal port 8081: in-cluster callers (IdP, seed Jobs). Each port serves every
 # protocol (Connect, gRPC, gRPC-Web, REST). Egress is not restricted.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

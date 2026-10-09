@@ -23,10 +23,12 @@ type RoleRef struct {
 	Version int    `json:"version"`
 }
 
-// Claims is what the IdP puts in a provider's access token.
+// Claims is what the IdP puts in a provider's access token. AuthzVersion is the member's
+// authorization version: the gateway refuses the token once the view holds another.
 type Claims struct {
-	CompanyID string    `json:"company_id"`
-	Roles     []RoleRef `json:"roles"`
+	CompanyID    string    `json:"company_id"`
+	Roles        []RoleRef `json:"roles"`
+	AuthzVersion int64     `json:"authz_version"`
 }
 
 // Claims resolves a subject's company and roles for a provider login.
@@ -34,8 +36,8 @@ func (s *Service) Claims(ctx context.Context, sub string) (Claims, error) {
 	var c Claims
 	var status string
 	err := s.DB.QueryRow(ctx, `
-		SELECT m.company_id::text, c.status FROM members m JOIN companies c ON c.id = m.company_id WHERE m.sub = $1`, sub).
-		Scan(&c.CompanyID, &status)
+		SELECT m.company_id::text, m.authz_version, c.status FROM members m JOIN companies c ON c.id = m.company_id WHERE m.sub = $1`, sub).
+		Scan(&c.CompanyID, &c.AuthzVersion, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Claims{}, fail(KindNotFound, "not_a_member", "subject belongs to no company")
 	} else if err != nil {
@@ -71,7 +73,8 @@ func (s *Service) CreateCompany(ctx context.Context, name, adminSub string) (com
 	}
 
 	companyID, roleID := uuid.NewString(), uuid.NewString()
-	err = s.tx(ctx, func(tx pgx.Tx) error {
+	var version int64
+	err = s.write(ctx, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO companies (id, name) VALUES ($1, $2)`, companyID, name); err != nil {
 			return err
 		}
@@ -79,13 +82,17 @@ func (s *Service) CreateCompany(ctx context.Context, name, adminSub string) (com
 			roleID, companyID, AdminRoleName); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO members (sub, company_id) VALUES ($1, $2)`, adminSub, companyID); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO members (sub, company_id) VALUES ($1, $2) RETURNING authz_version`, adminSub, companyID).Scan(&version); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO member_roles (sub, company_id, role_id) VALUES ($1, $2, $3)`, adminSub, companyID, roleID); err != nil {
-			return err
-		}
-		return bump(ctx, tx, BundleDiscovery, CompanyBundle(companyID))
+		_, err := tx.Exec(ctx, `INSERT INTO member_roles (sub, company_id, role_id) VALUES ($1, $2, $3)`, adminSub, companyID, roleID)
+		return err
+	}, func(ctx context.Context) error {
+		return errors.Join(
+			s.View.PutCompany(ctx, companyID, "active"),
+			s.View.PutRole(ctx, RoleView{CompanyID: companyID, RoleID: roleID, Permissions: []string{AllPermission}}),
+			s.View.PutUserVersion(ctx, adminSub, version),
+		)
 	})
 	if isUniqueViolation(err) {
 		// A concurrent retry for the same subject won: answer with its company.
@@ -101,8 +108,8 @@ func (s *Service) CreateCompany(ctx context.Context, name, adminSub string) (com
 	return companyID, true, nil
 }
 
-// SetCompanyStatus suspends or reactivates a company. A suspended company's bundle denies
-// every request within one long poll, and its users can no longer sign in to provider apps.
+// SetCompanyStatus suspends or reactivates a company. The gateway denies every request of a
+// suspended company's users at once, and they can no longer sign in to provider apps.
 func (s *Service) SetCompanyStatus(ctx context.Context, companyID, status string) error {
 	if status != "active" && status != "suspended" {
 		return fail(KindInvalid, "invalid_status", "status must be active or suspended")
@@ -110,7 +117,8 @@ func (s *Service) SetCompanyStatus(ctx context.Context, companyID, status string
 	if uuid.Validate(companyID) != nil {
 		return notFound("company")
 	}
-	return s.tx(ctx, func(tx pgx.Tx) error {
+	changed := false
+	return s.write(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE companies SET status = $2 WHERE id = $1 AND status <> $2`, companyID, status)
 		if err != nil {
 			return err
@@ -125,7 +133,13 @@ func (s *Service) SetCompanyStatus(ctx context.Context, companyID, status string
 			}
 			return nil
 		}
-		return bump(ctx, tx, CompanyBundle(companyID))
+		changed = true
+		return nil
+	}, func(ctx context.Context) error {
+		if !changed {
+			return nil
+		}
+		return s.View.PutCompany(ctx, companyID, status)
 	})
 }
 

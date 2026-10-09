@@ -15,13 +15,23 @@ import (
 	"github.com/tanjed/bus2/authz/manifest"
 )
 
-// Module provides the Service and seeds Authz's own manifest on start.
+// Module provides the Service, seeds Authz's own manifest on start, then rebuilds the gateway
+// view (a Redis it cannot write fails the boot).
 var Module = fx.Module("rbac",
-	fx.Provide(func(pool *pgxpool.Pool, pub events.Publisher, c idp.Client, cfg config.Config) *Service {
-		return New(pool, pub, c, cfg.InviteTTL)
+	fx.Provide(func(pool *pgxpool.Pool, pub events.Publisher, c idp.Client, view View, cfg config.Config) *Service {
+		return New(pool, pub, c, view, cfg.InviteTTL)
 	}),
-	fx.Invoke(seedOwnManifest),
+	fx.Invoke(seedOwnManifest, rebuildOnStart),
 )
+
+func rebuildOnStart(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartHook(func(ctx context.Context) error {
+		if err := svc.Rebuild(ctx); err != nil {
+			return fmt.Errorf("rebuild the gateway view: %w", err)
+		}
+		return nil
+	}))
+}
 
 // seedOwnManifest loads the admin API's permissions and routes, as any service's seed Job would.
 func seedOwnManifest(lc fx.Lifecycle, svc *Service) {

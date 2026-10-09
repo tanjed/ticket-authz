@@ -78,12 +78,5 @@ CREATE TABLE invitations (
 );
 CREATE INDEX invitations_company ON invitations (company_id);
 
--- One row per OPA bundle; bumped in the same transaction as the write that changes it.
-CREATE TABLE bundle_revisions (
-  name     text PRIMARY KEY,
-  revision bigint NOT NULL DEFAULT 1
-);
-INSERT INTO bundle_revisions (name) VALUES ('discovery'), ('catalogue'), ('consumer');
-
 -- +goose Down
-DROP TABLE bundle_revisions, invitations, member_roles, members, role_permissions, roles, companies, routes, permissions;
+DROP TABLE invitations, member_roles, members, role_permissions, roles, companies, routes, permissions;

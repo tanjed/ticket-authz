@@ -9,15 +9,17 @@ import (
 
 	"github.com/tanjed/bus2/authz/internal/catalogue"
 	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/redisview"
 )
 
-func TestApplyManifest_IdempotentAndBumpsOnlyOnChange(t *testing.T) {
+func TestApplyManifest_IdempotentAndWritesOnlyOnChange(t *testing.T) {
 	e := newService(t)
 	e.seed(t)
-	cat := e.revision(t, rbac.BundleCatalogue)
+	require.Len(t, e.hash(t, redisview.RoutesKey), 4)
 
+	require.NoError(t, e.rdb.HSet(e.ctx, redisview.RoutesKey, "marker", "x").Err())
 	e.seed(t) // same manifest again
-	require.Equal(t, cat, e.revision(t, rbac.BundleCatalogue), "a no-op re-seed must not bump")
+	require.Equal(t, "x", e.hash(t, redisview.RoutesKey)["marker"], "a no-op re-seed must not write the view")
 
 	res, err := e.svc.ApplyManifest(e.ctx, "order", catalogue.Manifest{
 		Permissions: []catalogue.Permission{{Key: "order:create", Consumer: true}},
@@ -25,22 +27,29 @@ func TestApplyManifest_IdempotentAndBumpsOnlyOnChange(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, res.Changed)
-	require.Greater(t, e.revision(t, rbac.BundleCatalogue), cat)
-
-	snap, _, err := e.svc.BundleSnapshot(e.ctx, rbac.BundleCatalogue)
-	require.NoError(t, err)
-	require.Equal(t, map[string]rbac.RouteRule{"order.create": {Permission: "order:create"}}, snap.Routes,
-		"dropped routes are deprecated and leave the bundle")
+	require.Equal(t, map[string]string{"order.create": "order:create"}, e.hash(t, redisview.RoutesKey),
+		"dropped routes are deprecated and leave the view")
 
 	perms, err := e.svc.Permissions(e.ctx)
 	require.NoError(t, err)
 	require.Len(t, perms, 1)
 
 	e.seed(t) // listing them again restores them
-	snap, _, err = e.svc.BundleSnapshot(e.ctx, rbac.BundleCatalogue)
+	routes := e.hash(t, redisview.RoutesKey)
+	require.Len(t, routes, 4)
+	require.Equal(t, rbac.RoutePublic, routes["order.health"])
+}
+
+// A permission a manifest stops listing leaves every role holding it, in the view.
+func TestApplyManifest_DeprecationLeavesRoles(t *testing.T) {
+	e := newService(t)
+	e.seed(t)
+	id, admin := e.company(t, "acme")
+	role, err := e.svc.CreateRole(e.ctx, admin, rbac.RoleInput{Name: "Clerk", Permissions: []string{"order:read", "order:cancel"}})
 	require.NoError(t, err)
-	require.Len(t, snap.Routes, 4)
-	require.True(t, snap.Routes["order.health"].Public)
+	_, err = e.svc.ApplyManifest(e.ctx, "order", catalogue.Manifest{Permissions: []catalogue.Permission{{Key: "order:read"}}})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"order:read": "1"}, e.hash(t, redisview.RoleKey(id, role.ID)))
 }
 
 func TestApplyManifest_OwnershipConflict(t *testing.T) {
@@ -57,20 +66,17 @@ func TestApplyManifest_OwnershipConflict(t *testing.T) {
 	requireStatus(t, err, rbac.KindInvalid, "invalid_service")
 }
 
-func TestConsumerBundle(t *testing.T) {
+func TestConsumerView(t *testing.T) {
 	e := newService(t)
 	e.seed(t)
-	snap, ok, err := e.svc.BundleSnapshot(e.ctx, rbac.BundleConsumer)
+	members, err := e.rdb.SMembers(e.ctx, redisview.ConsumerKey).Result()
 	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, map[string]bool{"order:create": true, "order:read": true}, snap.Consumer)
+	require.ElementsMatch(t, []string{"order:create", "order:read"}, members)
 }
 
 func TestCreateCompany_AndClaims(t *testing.T) {
 	e := newService(t)
-	disc := e.revision(t, rbac.BundleDiscovery)
 	id, admin := e.company(t, "acme")
-	require.Greater(t, e.revision(t, rbac.BundleDiscovery), disc)
 
 	claims, err := e.svc.Claims(e.ctx, admin.Sub)
 	require.NoError(t, err)
@@ -90,29 +96,20 @@ func TestCreateCompany_AndClaims(t *testing.T) {
 	_, _, err = e.svc.CreateCompany(e.ctx, "  ", "x")
 	requireStatus(t, err, rbac.KindInvalid, "invalid_name")
 
-	snap, ok, err := e.svc.BundleSnapshot(e.ctx, rbac.CompanyBundle(id))
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, "active", snap.Company.Status)
-	require.True(t, snap.Company.Roles[claims.Roles[0].ID].GrantsAll)
-
-	snap, _, err = e.svc.BundleSnapshot(e.ctx, rbac.BundleDiscovery)
-	require.NoError(t, err)
-	require.Equal(t, []string{id}, snap.CompanyIDs)
+	require.Equal(t, map[string]string{"status": "active"}, e.hash(t, redisview.CompanyKey(id)))
+	require.Equal(t, map[string]string{rbac.AllPermission: "1"}, e.hash(t, redisview.RoleKey(id, claims.Roles[0].ID)))
+	require.Positive(t, claims.AuthzVersion)
+	require.Equal(t, claims.AuthzVersion, e.version(t, admin.Sub), "the token's version is the view's")
 	require.Equal(t, []string{"COMPANY_REGISTERED"}, e.ev.names())
 }
 
 func TestSuspendedCompany(t *testing.T) {
 	e := newService(t)
 	id, admin := e.company(t, "acme")
-	rev := e.revision(t, rbac.CompanyBundle(id))
 	require.NoError(t, e.svc.SetCompanyStatus(e.ctx, id, "suspended"))
-	require.Greater(t, e.revision(t, rbac.CompanyBundle(id)), rev)
 	_, err := e.svc.Claims(e.ctx, admin.Sub)
 	requireStatus(t, err, rbac.KindForbidden, "company_suspended")
-	snap, _, err := e.svc.BundleSnapshot(e.ctx, rbac.CompanyBundle(id))
-	require.NoError(t, err)
-	require.Equal(t, "suspended", snap.Company.Status)
+	require.Equal(t, "suspended", e.hash(t, redisview.CompanyKey(id))["status"])
 
 	require.NoError(t, e.svc.SetCompanyStatus(e.ctx, id, "active"))
 	_, err = e.svc.Claims(e.ctx, admin.Sub)
@@ -120,18 +117,17 @@ func TestSuspendedCompany(t *testing.T) {
 	requireStatus(t, e.svc.SetCompanyStatus(e.ctx, "5f1d3c1e-0000-4000-8000-000000000000", "active"), rbac.KindNotFound, "")
 }
 
-func TestRoles_CRUDAndBundle(t *testing.T) {
+func TestRoles_CRUDAndView(t *testing.T) {
 	e := newService(t)
 	e.seed(t)
 	id, admin := e.company(t, "acme")
-	rev := e.revision(t, rbac.CompanyBundle(id))
 
 	clerk, err := e.svc.CreateRole(e.ctx, admin, rbac.RoleInput{Name: " Clerk ", Permissions: []string{"order:read", "order:create", "order:read"}})
 	require.NoError(t, err)
 	require.Equal(t, "Clerk", clerk.Name)
 	require.Equal(t, []string{"order:create", "order:read"}, clerk.Permissions)
 	require.Equal(t, 1, clerk.Version)
-	require.Greater(t, e.revision(t, rbac.CompanyBundle(id)), rev)
+	require.Equal(t, map[string]string{"order:create": "1", "order:read": "1"}, e.hash(t, redisview.RoleKey(id, clerk.ID)))
 
 	_, err = e.svc.CreateRole(e.ctx, admin, rbac.RoleInput{Name: "clerk"})
 	requireStatus(t, err, rbac.KindConflict, "name_taken")
@@ -143,9 +139,7 @@ func TestRoles_CRUDAndBundle(t *testing.T) {
 	require.Equal(t, 2, updated.Version)
 	require.Equal(t, []string{"order:read"}, updated.Permissions)
 
-	snap, _, err := e.svc.BundleSnapshot(e.ctx, rbac.CompanyBundle(id))
-	require.NoError(t, err)
-	require.Equal(t, map[string]bool{"order:read": true}, snap.Company.Roles[clerk.ID].Permissions)
+	require.Equal(t, map[string]string{"order:read": "1"}, e.hash(t, redisview.RoleKey(id, clerk.ID)))
 
 	roles, err := e.svc.ListRoles(e.ctx, admin)
 	require.NoError(t, err)
@@ -163,6 +157,7 @@ func TestRoles_CRUDAndBundle(t *testing.T) {
 	require.NoError(t, e.svc.DeleteRole(e.ctx, admin, clerk.ID))
 	_, err = e.svc.GetRole(e.ctx, admin, clerk.ID)
 	requireStatus(t, err, rbac.KindNotFound, "")
+	require.Empty(t, e.hash(t, redisview.RoleKey(id, clerk.ID)))
 }
 
 func TestRoles_TenantIsolation(t *testing.T) {
@@ -282,11 +277,10 @@ func TestInvitations(t *testing.T) {
 	require.Equal(t, "expired", old.Status)
 	requireStatus(t, e.svc.AcceptInvitation(e.ctx, inv.ID, "staff-1"), rbac.KindPrecondition, "expired")
 
-	rev := e.revision(t, rbac.CompanyBundle(id))
 	require.NoError(t, e.svc.AcceptInvitation(e.ctx, inv2.ID, "staff-1"))
-	require.Greater(t, e.revision(t, rbac.CompanyBundle(id)), rev)
 	claims, err := e.svc.Claims(e.ctx, "staff-1")
 	require.NoError(t, err)
+	require.Equal(t, claims.AuthzVersion, e.version(t, "staff-1"))
 	require.Equal(t, id, claims.CompanyID)
 	require.Equal(t, "Reader", claims.Roles[0].Name)
 
@@ -313,4 +307,60 @@ func TestInvitation_Expiry(t *testing.T) {
 	require.NoError(t, err)
 	e.svc.Now = func() time.Time { return time.Now().Add(8 * 24 * time.Hour) }
 	requireStatus(t, e.svc.AcceptInvitation(e.ctx, inv.ID, "late"), rbac.KindPrecondition, "expired")
+}
+
+// A member's version changes with their roles, is never reused, and leaves the view with them.
+func TestAuthzVersion(t *testing.T) {
+	e := newService(t)
+	e.seed(t)
+	_, admin := e.company(t, "acme")
+	reader, err := e.svc.CreateRole(e.ctx, admin, rbac.RoleInput{Name: "Reader", Permissions: []string{"order:read"}})
+	require.NoError(t, err)
+	inv, err := e.svc.CreateInvitation(e.ctx, admin, rbac.InvitationInput{Phone: "+8801711000001"})
+	require.NoError(t, err)
+	require.NoError(t, e.svc.AcceptInvitation(e.ctx, inv.ID, "staff-1"))
+	v1 := e.version(t, "staff-1")
+
+	// A role edit applies through the role's key: no version change, no refresh needed.
+	_, err = e.svc.UpdateRole(e.ctx, admin, reader.ID, rbac.RoleInput{Name: "Reader", Permissions: []string{"order:create"}})
+	require.NoError(t, err)
+	require.Equal(t, v1, e.version(t, "staff-1"))
+
+	// An assignment change does: the old token is stale.
+	require.NoError(t, e.svc.SetMemberRoles(e.ctx, admin, "staff-1", []string{reader.ID}))
+	v2 := e.version(t, "staff-1")
+	require.Greater(t, v2, v1)
+	claims, err := e.svc.Claims(e.ctx, "staff-1")
+	require.NoError(t, err)
+	require.Equal(t, v2, claims.AuthzVersion)
+
+	// Removed: no version at all. Invited back, a version never seen before.
+	require.NoError(t, e.svc.RemoveMember(e.ctx, admin, "staff-1"))
+	require.Zero(t, e.version(t, "staff-1"))
+	inv, err = e.svc.CreateInvitation(e.ctx, admin, rbac.InvitationInput{Phone: "+8801711000002"})
+	require.NoError(t, err)
+	require.NoError(t, e.svc.AcceptInvitation(e.ctx, inv.ID, "staff-1"))
+	require.Greater(t, e.version(t, "staff-1"), v2)
+}
+
+// Rebuild rewrites the whole view from Postgres and deletes keys it no longer has.
+func TestRebuild(t *testing.T) {
+	e := newService(t)
+	e.seed(t)
+	id, admin := e.company(t, "acme")
+	require.NoError(t, e.rdb.FlushAll(e.ctx).Err())
+	require.NoError(t, e.rdb.Set(e.ctx, redisview.UserVersionKey("ghost"), 7, 0).Err())
+	require.NoError(t, e.rdb.Set(e.ctx, "other:key", 1, 0).Err())
+
+	require.NoError(t, e.svc.Rebuild(e.ctx))
+	require.Len(t, e.hash(t, redisview.RoutesKey), 4)
+	require.Equal(t, "active", e.hash(t, redisview.CompanyKey(id))["status"])
+	claims, err := e.svc.Claims(e.ctx, admin.Sub)
+	require.NoError(t, err)
+	require.Equal(t, claims.AuthzVersion, e.version(t, admin.Sub))
+	require.Equal(t, map[string]string{rbac.AllPermission: "1"}, e.hash(t, redisview.RoleKey(id, claims.Roles[0].ID)))
+	require.Zero(t, e.version(t, "ghost"), "an orphan key is deleted")
+	n, err := e.rdb.Exists(e.ctx, "other:key").Result()
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n, "keys outside authz: are not Authz's")
 }

@@ -39,13 +39,11 @@ func Start(ctx context.Context) (*pgxpool.Pool, func(), error) {
 	return pool, func() { pool.Close(); stop() }, nil
 }
 
-// Reset empties every table and puts the bundle revisions back to their initial state.
+// Reset empties every table.
 func Reset(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
-		TRUNCATE invitations, member_roles, members, role_permissions, roles, companies, routes, permissions CASCADE;
-		DELETE FROM bundle_revisions WHERE name LIKE 'companies/%';
-		UPDATE bundle_revisions SET revision = 1;`)
+		TRUNCATE invitations, member_roles, members, role_permissions, roles, companies, routes, permissions CASCADE;`)
 	if err != nil {
 		t.Fatal(err)
 	}

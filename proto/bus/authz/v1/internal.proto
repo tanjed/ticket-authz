@@ -61,7 +61,7 @@ message ManifestPermission {
 }
 
 message ManifestRoute {
-  // The APISIX route name (what the gateway's opa plugin sends).
+  // The APISIX route name (what the gateway looks up).
   string name = 1;
   // One of the manifest's permissions; empty when public.
   string permission = 2;
@@ -78,7 +78,7 @@ message ApplyManifestResponse {
   string service = 1;
   int32 permissions = 2;
   int32 routes = 3;
-  // False when the manifest matched what was stored (the bundles did not change).
+  // False when the manifest matched what was stored (the gateway view did not change).
   bool changed = 4;
 }
 
@@ -113,6 +113,9 @@ message AcceptInvitationRequest {
 message GetClaimsResponse {
   string company_id = 1;
   repeated RoleRef roles = 2;
+  // The member's authorization version: put it in the access token (claim authz_version). The
+  // gateway refuses the token (401 token_stale) once the member's roles change.
+  int64 authz_version = 3;
 }
 
 message SetCompanyStatusResponse {}

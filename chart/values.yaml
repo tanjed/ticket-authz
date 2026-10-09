@@ -8,14 +8,9 @@ replicas: 2
 secrets:
   # keys: password, url (postgres://authz:<password>@<release>-postgres:5432/authz?sslmode=disable)
   postgres: { name: authz-postgres }
-  # key: private.pem (RSA, PEM): every OPA bundle is signed with it. The gateway's OPA holds the
-  # public half under bundleSigning.keyId (../APISIX, opa.bundleSigning).
-  bundleSigning: { name: authz-bundle-signing }
-
-# The name OPA's keys config gives the signing key's public half. Rotate by adding the new public
-# key to OPA under a new id, then switching this and the Secret.
-bundleSigning:
-  keyId: ""   # no default: set it in helmvars/
+  # key: url (redis://[:<password>@]<host>:6379/0): the platform's Redis master (../Infra). Authz
+  # writes the gateway view there; the gateway reads a replica.
+  redis: { name: authz-redis }
 
 # The IdP UI's cluster-internal Service (invitations). Never its public host: the IdP refuses it.
 idpInternalUrl: http://idp-ui:3001
@@ -25,12 +20,9 @@ kafka:
   brokers: ""   # host:port[,host:port]; empty: events are only logged
   topic: authz.events
 
-# What discovery tells each OPA sidecar about long polling.
-longPollSeconds: 30
-
 # Who may reach which port (needs a CNI that enforces NetworkPolicy):
 #   public (8080, admin API, trusts X-Bus-* headers): only the APISIX gateway pods.
-#   internal (8081, IdP / seed Jobs / OPA bundles): any pod in the cluster; never the gateway's routes.
+#   internal (8081, IdP / seed Jobs): any pod in the cluster; never the gateway's routes.
 networkPolicy:
   gateway:
     namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: apisix } }

@@ -176,7 +176,8 @@ func (s *Service) AcceptInvitation(ctx context.Context, id, sub string) error {
 	}
 	var companyID string
 	var roleIDs []string
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	var version int64
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		var expires time.Time
 		var accepted *time.Time
 		err := tx.QueryRow(ctx, `
@@ -193,7 +194,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, id, sub string) error {
 		if !s.Now().Before(expires) {
 			return fail(KindPrecondition, "expired", "this invitation has expired")
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO members (sub, company_id) VALUES ($1, $2)`, sub, companyID); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO members (sub, company_id) VALUES ($1, $2) RETURNING authz_version`, sub, companyID).Scan(&version); err != nil {
 			if isUniqueViolation(err) {
 				return fail(KindConflict, "already_member", "this account already belongs to a company")
 			}
@@ -204,10 +205,10 @@ func (s *Service) AcceptInvitation(ctx context.Context, id, sub string) error {
 			SELECT $1, $2, id FROM roles WHERE company_id = $2 AND id = ANY($3::uuid[])`, sub, companyID, roleIDs); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE invitations SET accepted_at = now(), sub = $2 WHERE id = $1`, id, sub); err != nil {
-			return err
-		}
-		return bump(ctx, tx, CompanyBundle(companyID))
+		_, err = tx.Exec(ctx, `UPDATE invitations SET accepted_at = now(), sub = $2 WHERE id = $1`, id, sub)
+		return err
+	}, func(ctx context.Context) error {
+		return s.View.PutUserVersion(ctx, sub, version)
 	})
 	if err != nil {
 		return err

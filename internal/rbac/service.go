@@ -1,6 +1,6 @@
 // Package rbac is Authz's domain: the catalogue, companies, roles, members and invitations,
-// with their SQL. Every write that changes what OPA sees bumps the affected bundle revisions in
-// the same transaction and notifies the other replicas (NOTIFY is delivered on commit).
+// with their SQL. Every write that changes what the gateway sees updates the gateway view (View,
+// Redis) once it has committed (view.go).
 package rbac
 
 import (
@@ -16,29 +16,17 @@ import (
 	"github.com/tanjed/bus2/authz/internal/idp"
 )
 
-// NotifyChannel carries the name of a bundle whose revision changed.
-const NotifyChannel = "authz_bundles"
-
-// Bundle names (also bundle_revisions.name).
-const (
-	BundleDiscovery = "discovery"
-	BundleCatalogue = "catalogue"
-	BundleConsumer  = "consumer"
-)
-
-// CompanyBundle is the bundle name for one company's roles.
-func CompanyBundle(companyID string) string { return "companies/" + companyID }
-
 type Service struct {
 	DB        *pgxpool.Pool
 	Events    events.Publisher
 	IdP       idp.Client
+	View      View
 	InviteTTL time.Duration
 	Now       func() time.Time
 }
 
-func New(db *pgxpool.Pool, pub events.Publisher, idpClient idp.Client, inviteTTL time.Duration) *Service {
-	return &Service{DB: db, Events: pub, IdP: idpClient, InviteTTL: inviteTTL, Now: time.Now}
+func New(db *pgxpool.Pool, pub events.Publisher, idpClient idp.Client, view View, inviteTTL time.Duration) *Service {
+	return &Service{DB: db, Events: pub, IdP: idpClient, View: view, InviteTTL: inviteTTL, Now: time.Now}
 }
 
 // Kind classifies a domain error; the API layer maps it to a gRPC code (and so an HTTP status).
@@ -77,19 +65,4 @@ func AsError(err error) (*Error, bool) {
 
 func (s *Service) tx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, s.DB, fn)
-}
-
-// bump increments each bundle's revision (creating the row if needed) and notifies listeners.
-func bump(ctx context.Context, tx pgx.Tx, names ...string) error {
-	for _, n := range names {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO bundle_revisions (name, revision) VALUES ($1, 1)
-			ON CONFLICT (name) DO UPDATE SET revision = bundle_revisions.revision + 1`, n); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotifyChannel, n); err != nil {
-			return err
-		}
-	}
-	return nil
 }

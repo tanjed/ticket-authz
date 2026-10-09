@@ -86,7 +86,7 @@ func (x *ManifestPermission) GetConsumer() bool {
 
 type ManifestRoute struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The APISIX route name (what the gateway's opa plugin sends).
+	// The APISIX route name (what the gateway looks up).
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// One of the manifest's permissions; empty when public.
 	Permission    string `protobuf:"bytes,2,opt,name=permission,proto3" json:"permission,omitempty"`
@@ -211,7 +211,7 @@ type ApplyManifestResponse struct {
 	Service     string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
 	Permissions int32                  `protobuf:"varint,2,opt,name=permissions,proto3" json:"permissions,omitempty"`
 	Routes      int32                  `protobuf:"varint,3,opt,name=routes,proto3" json:"routes,omitempty"`
-	// False when the manifest matched what was stored (the bundles did not change).
+	// False when the manifest matched what was stored (the gateway view did not change).
 	Changed       bool `protobuf:"varint,4,opt,name=changed,proto3" json:"changed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -572,9 +572,12 @@ func (x *AcceptInvitationRequest) GetSub() string {
 }
 
 type GetClaimsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
-	Roles         []*RoleRef             `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CompanyId string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	Roles     []*RoleRef             `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty"`
+	// The member's authorization version: put it in the access token (claim authz_version). The
+	// gateway refuses the token (401 token_stale) once the member's roles change.
+	AuthzVersion  int64 `protobuf:"varint,3,opt,name=authz_version,json=authzVersion,proto3" json:"authz_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -621,6 +624,13 @@ func (x *GetClaimsResponse) GetRoles() []*RoleRef {
 		return x.Roles
 	}
 	return nil
+}
+
+func (x *GetClaimsResponse) GetAuthzVersion() int64 {
+	if x != nil {
+		return x.AuthzVersion
+	}
+	return 0
 }
 
 type SetCompanyStatusResponse struct {
@@ -780,11 +790,12 @@ const file_bus_authz_v1_internal_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\";\n" +
 	"\x17AcceptInvitationRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
-	"\x03sub\x18\x02 \x01(\tR\x03sub\"_\n" +
+	"\x03sub\x18\x02 \x01(\tR\x03sub\"\x84\x01\n" +
 	"\x11GetClaimsResponse\x12\x1d\n" +
 	"\n" +
 	"company_id\x18\x01 \x01(\tR\tcompanyId\x12+\n" +
-	"\x05roles\x18\x02 \x03(\v2\x15.bus.authz.v1.RoleRefR\x05roles\"\x1a\n" +
+	"\x05roles\x18\x02 \x03(\v2\x15.bus.authz.v1.RoleRefR\x05roles\x12#\n" +
+	"\rauthz_version\x18\x03 \x01(\x03R\fauthzVersion\"\x1a\n" +
 	"\x18SetCompanyStatusResponse\"Q\n" +
 	"\x15GetInvitationResponse\x128\n" +
 	"\n" +

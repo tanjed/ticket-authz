@@ -1,5 +1,5 @@
 // Package server runs Authz's two listeners: public (company admin API, reachable only from the
-// gateway) and internal (seed Jobs, the IdP, OPA bundles). Each serves Connect, gRPC, gRPC-Web
+// gateway) and internal (seed Jobs, the IdP). Each serves Connect, gRPC, gRPC-Web
 // and REST on one port (HTTP/1.1 and cleartext HTTP/2).
 package server
 
@@ -22,13 +22,11 @@ import (
 type Params struct {
 	fx.In
 
-	Cfg        config.Config
-	Admin      authzv1connect.AdminServiceHandler
-	Internal   authzv1connect.InternalServiceHandler
-	Bundle     authzv1connect.BundleServiceHandler
-	Health     authzv1connect.HealthServiceHandler
-	OPABundles http.Handler `name:"bundles"` // OPA's bundle download
-	Log        *slog.Logger
+	Cfg      config.Config
+	Admin    authzv1connect.AdminServiceHandler
+	Internal authzv1connect.InternalServiceHandler
+	Health   authzv1connect.HealthServiceHandler
+	Log      *slog.Logger
 }
 
 // handlers are the two listeners' handlers, built without opening any socket (tests use them).
@@ -70,8 +68,7 @@ func New(p Params) (*Servers, error) {
 	}
 	return &Servers{log: p.Log, listeners: []listener{
 		{"public", p.Cfg.PublicAddr, newHTTPServer(h.public, 30*time.Second)},
-		// No WriteTimeout: OPA's bundle long polls hold the response open.
-		{"internal", p.Cfg.InternalAddr, newHTTPServer(h.internal, 0)},
+		{"internal", p.Cfg.InternalAddr, newHTTPServer(h.internal, 30*time.Second)},
 	}}, nil
 }
 

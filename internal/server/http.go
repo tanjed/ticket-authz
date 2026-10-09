@@ -33,7 +33,7 @@ func (z *zone) Service(path string, h http.Handler) {
 }
 
 // Handle adds a hand-written handler under a chi pattern, optionally method-prefixed
-// ("GET /bundles/*").
+// ("GET /metrics").
 func (z *zone) Handle(pattern string, h http.Handler) {
 	z.handlers = append(z.handlers, rawHandler{pattern, h})
 }

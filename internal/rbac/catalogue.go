@@ -13,7 +13,7 @@ type ManifestResult struct {
 	Service     string `json:"service"`
 	Permissions int    `json:"permissions"`
 	Routes      int    `json:"routes"`
-	// Changed is false when the manifest matched what was stored (bundles untouched).
+	// Changed is false when the manifest matched what was stored (the gateway view untouched).
 	Changed bool `json:"changed"`
 }
 
@@ -36,7 +36,7 @@ func (s *Service) ApplyManifest(ctx context.Context, service string, m catalogue
 	}
 
 	res := ManifestResult{Service: service, Permissions: len(keys), Routes: len(names)}
-	err := s.tx(ctx, func(tx pgx.Tx) error {
+	err := s.write(ctx, func(tx pgx.Tx) error {
 		// Seeds from several services may run at once; ownership checks need them serialised.
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('authz.manifests'))`); err != nil {
 			return err
@@ -95,10 +95,13 @@ func (s *Service) ApplyManifest(ctx context.Context, service string, m catalogue
 		}
 		changed += tag.RowsAffected()
 
-		if res.Changed = changed > 0; res.Changed {
-			return bump(ctx, tx, BundleCatalogue, BundleConsumer)
-		}
+		res.Changed = changed > 0
 		return nil
+	}, func(ctx context.Context) error {
+		if !res.Changed {
+			return nil
+		}
+		return s.putCatalogue(ctx)
 	})
 	return res, err
 }

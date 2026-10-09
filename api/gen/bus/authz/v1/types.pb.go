@@ -79,7 +79,7 @@ type CompanyStatus int32
 const (
 	CompanyStatus_COMPANY_STATUS_UNSPECIFIED CompanyStatus = 0
 	CompanyStatus_COMPANY_STATUS_ACTIVE      CompanyStatus = 1
-	// Every request of the company's users is denied (within one bundle poll).
+	// Every request of the company's users is denied, at once.
 	CompanyStatus_COMPANY_STATUS_SUSPENDED CompanyStatus = 2
 )
 

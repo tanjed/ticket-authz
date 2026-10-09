@@ -10,10 +10,6 @@
       "description": "AdminService is the company admin API, served on the public listeners (REST :8080, gRPC :9090).\nOnly the APISIX gateway can reach them: it has verified the caller's token and the route's\npermission, and passes the caller as x-bus-subject, x-bus-company-id and x-bus-user-type\n(HTTP headers, or gRPC metadata). Every call is scoped to the caller's company and checked\nagainst the escalation rule: nobody hands out permissions they do not hold."
     },
     {
-      "name": "BundleService",
-      "description": "BundleService shows the signed OPA bundles to operators and tools. OPA itself downloads them\nfrom GET /bundles/{name}.tar.gz (ETag, long polling and 304 Not Modified: a protocol an RPC\ncannot speak). Served on the internal listener only."
-    },
-    {
       "name": "HealthService",
       "description": "HealthService is the kubelet's probes, served on both listeners (the chart probes the internal\none)."
     },
@@ -29,61 +25,6 @@
     "application/json"
   ],
   "paths": {
-    "/internal/v1/bundles": {
-      "get": {
-        "summary": "Every bundle with its current revision.",
-        "operationId": "BundleService_ListBundles",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListBundlesResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "tags": [
-          "BundleService"
-        ]
-      }
-    },
-    "/internal/v1/bundles/{name}": {
-      "get": {
-        "summary": "A bundle as OPA receives it. NOT_FOUND: no such bundle.",
-        "operationId": "BundleService_GetBundle",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1GetBundleResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "pattern": ".+"
-          }
-        ],
-        "tags": [
-          "BundleService"
-        ]
-      }
-    },
     "/internal/v1/companies": {
       "post": {
         "summary": "Registers a company with its protected admin role held by admin_sub. Idempotent per subject:\nif admin_sub already belongs to a company, that company is returned (created = false).",
@@ -765,20 +706,7 @@
         },
         "changed": {
           "type": "boolean",
-          "description": "False when the manifest matched what was stored (the bundles did not change)."
-        }
-      }
-    },
-    "v1BundleInfo": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "discovery, catalogue, consumer or companies/\u003ccompany_id\u003e."
-        },
-        "revision": {
-          "type": "string",
-          "description": "The revision in the bundle's manifest (what OPA reports as active)."
+          "description": "False when the manifest matched what was stored (the gateway view did not change)."
         }
       }
     },
@@ -790,7 +718,7 @@
         "COMPANY_STATUS_SUSPENDED"
       ],
       "default": "COMPANY_STATUS_UNSPECIFIED",
-      "description": " - COMPANY_STATUS_SUSPENDED: Every request of the company's users is denied (within one bundle poll)."
+      "description": " - COMPANY_STATUS_SUSPENDED: Every request of the company's users is denied, at once."
     },
     "v1CreateCompanyRequest": {
       "type": "object",
@@ -862,19 +790,6 @@
     "v1DeleteRoleResponse": {
       "type": "object"
     },
-    "v1GetBundleResponse": {
-      "type": "object",
-      "properties": {
-        "bundle": {
-          "$ref": "#/definitions/v1BundleInfo"
-        },
-        "body": {
-          "type": "string",
-          "format": "byte",
-          "description": "The signed bundle, a .tar.gz."
-        }
-      }
-    },
     "v1GetClaimsResponse": {
       "type": "object",
       "properties": {
@@ -887,6 +802,11 @@
             "type": "object",
             "$ref": "#/definitions/v1RoleRef"
           }
+        },
+        "authz_version": {
+          "type": "string",
+          "format": "int64",
+          "description": "The member's authorization version: put it in the access token (claim authz_version). The\ngateway refuses the token (401 token_stale) once the member's roles change."
         }
       }
     },
@@ -962,18 +882,6 @@
       ],
       "default": "INVITATION_STATUS_UNSPECIFIED"
     },
-    "v1ListBundlesResponse": {
-      "type": "object",
-      "properties": {
-        "bundles": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1BundleInfo"
-          }
-        }
-      }
-    },
     "v1ListInvitationsResponse": {
       "type": "object",
       "properties": {
@@ -1046,7 +954,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "The APISIX route name (what the gateway's opa plugin sends)."
+          "description": "The APISIX route name (what the gateway looks up)."
         },
         "permission": {
           "type": "string",
