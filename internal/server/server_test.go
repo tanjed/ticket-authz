@@ -21,14 +21,16 @@ import (
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
-	"github.com/tanjed/bus2/authz/internal/admin"
 	"github.com/tanjed/bus2/authz/internal/events"
+	"github.com/tanjed/bus2/authz/internal/handler/admin"
+	healthhandler "github.com/tanjed/bus2/authz/internal/handler/health"
+	"github.com/tanjed/bus2/authz/internal/handler/internalapi"
 	"github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/idp"
-	"github.com/tanjed/bus2/authz/internal/internalapi"
-	"github.com/tanjed/bus2/authz/internal/rbac"
 	"github.com/tanjed/bus2/authz/internal/redisview"
+	"github.com/tanjed/bus2/authz/internal/repository"
 	"github.com/tanjed/bus2/authz/internal/router"
+	"github.com/tanjed/bus2/authz/internal/service"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -66,9 +68,15 @@ func newStack(t *testing.T) stack {
 	t.Helper()
 	testdb.Reset(t, pool)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, &redisview.Redis{C: redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})}, time.Hour)
-	h := build(t, log, admin.New(svc, log), internalapi.New(svc, log),
-		health.NewHandler(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log))
+	view := &redisview.Redis{C: redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})}
+	uow, ev := repository.NewUnitOfWork(pool, log), events.Log{Logger: log}
+	cat, comp, role, mem, inv := repository.NewCatalogue, repository.NewCompany, repository.NewRole, repository.NewMember, repository.NewInvitation
+	catalogue := service.NewCatalogueService(uow, view, cat, role)
+	invitations := service.NewInvitationService(uow, view, ev, noIdP{}, time.Hour, inv, mem, role, comp)
+	h := build(t, log,
+		admin.New(catalogue, service.NewRoleService(uow, view, ev, role, mem, cat), service.NewMemberService(uow, view, ev, mem, role), invitations, log),
+		internalapi.New(catalogue, service.NewCompanyService(uow, view, ev, comp, role, mem), invitations, log),
+		healthhandler.NewHandler(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log))
 	serve := func(h http.Handler) string {
 		srv := httptest.NewUnstartedServer(h)
 		srv.Config = newHTTPServer(h, 0)
@@ -88,7 +96,7 @@ type handlers struct {
 }
 
 // build has each service register itself, as the modules do, and builds each listener's handler.
-func build(t *testing.T, log *slog.Logger, a *admin.Admin, in *internalapi.Internal, h *health.Handler) handlers {
+func build(t *testing.T, log *slog.Logger, a *admin.Admin, in *internalapi.Internal, h *healthhandler.Handler) handlers {
 	t.Helper()
 	r := router.New(log)
 	a.Register(r)
@@ -275,7 +283,7 @@ func TestHealth(t *testing.T) {
 func TestHealth_Unavailable(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	down := health.New([]health.Probe{{Name: "db", Check: func(context.Context) error { return fmt.Errorf("dial tcp 10.0.0.5:5432: refused") }}})
-	h := build(t, log, &admin.Admin{}, &internalapi.Internal{}, health.NewHandler(down, log))
+	h := build(t, log, &admin.Admin{}, &internalapi.Internal{}, healthhandler.NewHandler(down, log))
 
 	code, body := do(t, h.internal, "GET", "/ready", "", nil)
 	require.Equal(t, http.StatusServiceUnavailable, code)

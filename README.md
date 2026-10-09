@@ -51,7 +51,7 @@ Needs Go, Docker and `make`. Runs on the `shohoz` network with `../Infra` (Redis
 
 ```sh
 make tools generate   # pinned buf + plugins into ./bin, regenerate api/ (only after editing proto/)
-make test             # Go tests; the rbac and server tests start a Postgres container (Redis: miniredis)
+make test             # Go tests; the service and server tests start a Postgres container (Redis: miniredis)
 (cd ../Infra && docker compose up -d)
 docker compose up -d --build
 ```
@@ -77,13 +77,15 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 | `cmd/authz` | Entry point: migrations, own manifest, gateway view rebuild, then serve |
 | `proto/`, `api/` | API definitions; generated Go (messages, Connect handlers and clients) and OpenAPI (committed) |
 | `internal/ioc` | Assembles the app from each package's `fx.Module` (`module.go`) |
-| `internal/rbac` | the domain and its SQL |
-| `internal/admin` | AdminService handler (public listener), over `rbac` |
-| `internal/internalapi` | InternalService handler (internal listener), over `rbac` |
+| `internal/handler/admin` | AdminService handler (public listener) |
+| `internal/handler/internalapi` | InternalService handler (internal listener) |
+| `internal/handler/health` | HealthService handler (both listeners) |
+| `internal/service` | business rules, domain types, ports (repository interfaces, unit of work, gateway view) |
+| `internal/repository` | SQL: the unit of work and one repository per aggregate |
 | `internal/router` | services per listener, Vanguard transcoders, chi routers, Connect options, error mapping |
 | `internal/server` | the two listeners |
 | `internal/redisview` | the gateway view in Redis (the key contract) |
-| `internal/health` | readiness probes (each dependency's package contributes one), HealthService handler |
+| `internal/health` | readiness probes (each dependency's package contributes one) |
 | `manifest/` | Authz's own manifest (its admin API routes), seeded at startup |
 | `migrations/` | goose SQL |
 | `chart/`, `helmvars/` | Helm chart (Deployment, Service, NetworkPolicy, ApisixRoute, Postgres) |

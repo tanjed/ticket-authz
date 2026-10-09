@@ -1,3 +1,5 @@
+// Package health serves HealthService, the kubelet's liveness and readiness probes, on both
+// listeners.
 package health
 
 import (
@@ -9,6 +11,7 @@ import (
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
+	checks "github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/router"
 )
 
@@ -17,11 +20,11 @@ var _ authzv1connect.HealthServiceHandler = (*Handler)(nil)
 // Handler implements HealthService: the kubelet's liveness and readiness probes.
 type Handler struct {
 	authzv1connect.UnimplementedHealthServiceHandler
-	Checker Checker
+	Checker checks.Checker
 	Log     *slog.Logger
 }
 
-func NewHandler(c Checker, log *slog.Logger) *Handler { return &Handler{Checker: c, Log: log} }
+func NewHandler(c checks.Checker, log *slog.Logger) *Handler { return &Handler{Checker: c, Log: log} }
 
 // Register serves HealthService on both listeners (GET /live, /ready).
 func (s *Handler) Register(r router.Registrar) {

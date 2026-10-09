@@ -45,10 +45,10 @@ type Registry struct {
 	log              *slog.Logger
 	mu               sync.Mutex
 	built            bool
-	public, internal []service
+	public, internal []entry
 }
 
-type service struct {
+type entry struct {
 	path    string // e.g. /bus.authz.v1.AdminService/
 	handler http.Handler
 }
@@ -62,14 +62,14 @@ func (r *Registry) Public(path string, h http.Handler)   { r.add(path, h, &r.pub
 func (r *Registry) Internal(path string, h http.Handler) { r.add(path, h, &r.internal) }
 func (r *Registry) Both(path string, h http.Handler)     { r.add(path, h, &r.public, &r.internal) }
 
-func (r *Registry) add(path string, h http.Handler, to ...*[]service) {
+func (r *Registry) add(path string, h http.Handler, to ...*[]entry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.built {
 		panic(fmt.Sprintf("router: %s registered after the handlers were built", path))
 	}
 	for _, list := range to {
-		*list = append(*list, service{path, h})
+		*list = append(*list, entry{path, h})
 	}
 }
 
@@ -89,7 +89,7 @@ func (r *Registry) Handlers() (public, internal http.Handler, err error) {
 // handler builds one listener's handler. Each service's RPC path goes to its transcoder as it
 // is (Connect, gRPC, gRPC-Web keep their own errors); every other path is REST (the transcoder
 // matches the google.api.http annotations, unknown paths are 404) behind restErrors.
-func handler(services []service) (http.Handler, error) {
+func handler(services []entry) (http.Handler, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer)
 	if len(services) == 0 {

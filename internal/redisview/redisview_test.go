@@ -8,7 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/service"
 )
 
 // A role without permissions has no key, and a Put replaces the key whole.
@@ -18,11 +18,11 @@ func TestPutRole(t *testing.T) {
 	r := &Redis{C: c}
 	key := RoleKey("c1", "r1")
 
-	require.NoError(t, r.PutRole(ctx, rbac.RoleView{CompanyID: "c1", RoleID: "r1", Permissions: []string{"a:b", "c:d"}}))
-	require.NoError(t, r.PutRole(ctx, rbac.RoleView{CompanyID: "c1", RoleID: "r1", Permissions: []string{"a:b"}}))
+	require.NoError(t, r.PutRole(ctx, service.RoleView{CompanyID: "c1", RoleID: "r1", Permissions: []string{"a:b", "c:d"}}))
+	require.NoError(t, r.PutRole(ctx, service.RoleView{CompanyID: "c1", RoleID: "r1", Permissions: []string{"a:b"}}))
 	require.Equal(t, map[string]string{"a:b": "1"}, c.HGetAll(ctx, key).Val())
 
-	require.NoError(t, r.PutRole(ctx, rbac.RoleView{CompanyID: "c1", RoleID: "r1"}))
+	require.NoError(t, r.PutRole(ctx, service.RoleView{CompanyID: "c1", RoleID: "r1"}))
 	require.Zero(t, c.Exists(ctx, key).Val())
 }
 

@@ -85,3 +85,21 @@ func (m Manifest) Validate() error {
 	}
 	return nil
 }
+
+// PermissionKeys is the manifest's permission keys, in order (never nil).
+func (m Manifest) PermissionKeys() []string {
+	out := make([]string, 0, len(m.Permissions))
+	for _, p := range m.Permissions {
+		out = append(out, p.Key)
+	}
+	return out
+}
+
+// RouteNames is the manifest's route names, in order (never nil).
+func (m Manifest) RouteNames() []string {
+	out := make([]string, 0, len(m.Routes))
+	for _, r := range m.Routes {
+		out = append(out, r.Name)
+	}
+	return out
+}

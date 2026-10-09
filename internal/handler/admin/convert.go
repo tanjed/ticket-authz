@@ -4,10 +4,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
-	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/service"
 )
 
-func rolePB(r rbac.Role) *authzv1.Role {
+func rolePB(r service.Role) *authzv1.Role {
 	return &authzv1.Role{
 		Id: r.ID, Name: r.Name, Protected: r.Protected, GrantsAll: r.GrantsAll, Version: int32(r.Version),
 		Permissions: r.Permissions, CreateTime: timestamppb.New(r.CreatedAt), UpdateTime: timestamppb.New(r.UpdatedAt),
@@ -21,7 +21,7 @@ var invitationStatus = map[string]authzv1.InvitationStatus{
 }
 
 // InvitationPB is an invitation as the proto carries it (InternalService returns it too).
-func InvitationPB(i rbac.Invitation) *authzv1.Invitation {
+func InvitationPB(i service.Invitation) *authzv1.Invitation {
 	pb := &authzv1.Invitation{
 		Id: i.ID, CompanyId: i.CompanyID, CompanyName: i.CompanyName, Phone: i.Phone, RoleIds: i.RoleIDs,
 		InvitedBy: i.InvitedBy, Sub: i.Sub, ExpireTime: timestamppb.New(i.ExpiresAt), CreateTime: timestamppb.New(i.CreatedAt),

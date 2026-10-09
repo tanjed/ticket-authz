@@ -9,15 +9,15 @@ import (
 
 	"github.com/tanjed/bus2/authz/internal/config"
 	"github.com/tanjed/bus2/authz/internal/health"
-	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/service"
 )
 
 // Module provides the Redis client (the master, AUTHZ_REDIS_URL) and the gateway view on it as
-// rbac.View, and contributes the "redis" health probe.
+// service.GatewayView, and contributes the "redis" health probe.
 var Module = fx.Module("redisview",
 	fx.Provide(
 		newClient,
-		fx.Annotate(func(c redis.UniversalClient) *Redis { return &Redis{C: c} }, fx.As(new(rbac.View))),
+		fx.Annotate(func(c redis.UniversalClient) *Redis { return &Redis{C: c} }, fx.As(new(service.GatewayView))),
 		fx.Annotate(probe, fx.ResultTags(health.ProbeGroup)),
 	),
 )

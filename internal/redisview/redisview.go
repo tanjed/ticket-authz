@@ -1,4 +1,4 @@
-// Package redisview stores the gateway view (rbac.View) in Redis: Authz writes the master, the
+// Package redisview stores the gateway view (service.GatewayView) in Redis: Authz writes the master, the
 // gateway reads a replica. The key layout is the contract with the gateway (../APISIX); see
 // docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md.
 package redisview
@@ -9,7 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/service"
 )
 
 // The keys. Every key Authz owns starts with Prefix: Replace deletes the ones it does not list.
@@ -28,7 +28,7 @@ func RoleKey(companyID, roleID string) string { return CompanyKey(companyID) + "
 // UserVersionKey is a member's authorization version (STRING).
 func UserVersionKey(sub string) string { return Prefix + "user:" + sub + ":version" }
 
-var _ rbac.View = (*Redis)(nil)
+var _ service.GatewayView = (*Redis)(nil)
 
 // Redis is the gateway view on a Redis master. Each key is replaced whole in one MULTI (DEL, then
 // write), so a reader never sees half of it.
@@ -48,7 +48,7 @@ func (r *Redis) PutCompany(ctx context.Context, companyID, status string) error 
 	return r.tx(ctx, func(p redis.Pipeliner) { putHash(ctx, p, CompanyKey(companyID), map[string]string{"status": status}) })
 }
 
-func (r *Redis) PutRole(ctx context.Context, role rbac.RoleView) error {
+func (r *Redis) PutRole(ctx context.Context, role service.RoleView) error {
 	return r.tx(ctx, func(p redis.Pipeliner) { putRole(ctx, p, role) })
 }
 
@@ -65,7 +65,7 @@ func (r *Redis) DeleteUser(ctx context.Context, sub string) error {
 }
 
 // Replace writes the whole view and deletes every other key under Prefix, in one MULTI.
-func (r *Redis) Replace(ctx context.Context, s rbac.Snapshot) error {
+func (r *Redis) Replace(ctx context.Context, s service.Snapshot) error {
 	keep := map[string]bool{RoutesKey: true, ConsumerKey: true}
 	for id := range s.Companies {
 		keep[CompanyKey(id)] = true
@@ -131,7 +131,7 @@ func putSet(ctx context.Context, p redis.Pipeliner, key string, members []string
 }
 
 // putRole: a role without permissions has no key (HEXISTS on a missing key is false).
-func putRole(ctx context.Context, p redis.Pipeliner, role rbac.RoleView) {
+func putRole(ctx context.Context, p redis.Pipeliner, role service.RoleView) {
 	fields := make(map[string]string, len(role.Permissions))
 	for _, k := range role.Permissions {
 		fields[k] = "1"

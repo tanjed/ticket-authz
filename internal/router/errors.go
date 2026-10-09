@@ -7,24 +7,24 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
-	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/service"
 )
 
 // ErrorDomain is the ErrorInfo domain; the reason is the domain error's code (e.g. "last_admin").
 const ErrorDomain = "authz.bus"
 
-var kindCodes = map[rbac.Kind]connect.Code{
-	rbac.KindInvalid:      connect.CodeInvalidArgument,
-	rbac.KindForbidden:    connect.CodePermissionDenied,
-	rbac.KindNotFound:     connect.CodeNotFound,
-	rbac.KindConflict:     connect.CodeAlreadyExists,
-	rbac.KindPrecondition: connect.CodeFailedPrecondition,
-	rbac.KindUnavailable:  connect.CodeUnavailable,
+var kindCodes = map[service.Kind]connect.Code{
+	service.KindInvalid:      connect.CodeInvalidArgument,
+	service.KindForbidden:    connect.CodePermissionDenied,
+	service.KindNotFound:     connect.CodeNotFound,
+	service.KindConflict:     connect.CodeAlreadyExists,
+	service.KindPrecondition: connect.CodeFailedPrecondition,
+	service.KindUnavailable:  connect.CodeUnavailable,
 }
 
 // Error turns a domain error into a Connect error carrying its reason; anything else (Postgres
 // down, a bug) becomes Internal without details, and is logged. Handlers return it for every
-// error from rbac.
+// error from service.
 func Error(log *slog.Logger, err error) error {
 	if err == nil {
 		return nil
@@ -32,7 +32,7 @@ func Error(log *slog.Logger, err error) error {
 	if ce := new(connect.Error); errors.As(err, &ce) {
 		return err
 	}
-	e, ok := rbac.AsError(err)
+	e, ok := service.AsError(err)
 	if !ok {
 		log.Error("request failed", "err", err)
 		return connect.NewError(connect.CodeInternal, errors.New("internal error"))

@@ -1,9 +1,11 @@
-package rbac_test
+package service_test
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"sync"
 	"testing"
@@ -17,8 +19,9 @@ import (
 	"github.com/tanjed/bus2/authz/internal/catalogue"
 	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/idp"
-	"github.com/tanjed/bus2/authz/internal/rbac"
 	"github.com/tanjed/bus2/authz/internal/redisview"
+	"github.com/tanjed/bus2/authz/internal/repository"
+	"github.com/tanjed/bus2/authz/internal/service"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -88,11 +91,16 @@ var (
 )
 
 type env struct {
-	svc *rbac.Service
-	ev  *fakeEvents
-	idp *fakeIdP
-	rdb *redis.Client // the gateway view, read back as the gateway would
-	ctx context.Context
+	catalogue   *service.CatalogueService
+	companies   *service.CompanyService
+	roles       *service.RoleService
+	members     *service.MemberService
+	invitations *service.InvitationService
+	view        *service.ViewService
+	ev          *fakeEvents
+	idp         *fakeIdP
+	rdb         *redis.Client // the gateway view, read back as the gateway would
+	ctx         context.Context
 }
 
 // newService resets the database. Tests in this package do not run in parallel.
@@ -103,13 +111,23 @@ func newService(t *testing.T) env {
 	ev, fi := &fakeEvents{}, &fakeIdP{byPhone: map[string]string{}}
 	rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	view := &redisview.Redis{C: rdb}
-	return env{svc: rbac.New(pool, ev, fi, view, 7*24*time.Hour), ev: ev, idp: fi, rdb: rdb, ctx: ctx}
+	uow := repository.NewUnitOfWork(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat, comp, role, mem, inv := repository.NewCatalogue, repository.NewCompany, repository.NewRole, repository.NewMember, repository.NewInvitation
+	return env{
+		catalogue:   service.NewCatalogueService(uow, view, cat, role),
+		companies:   service.NewCompanyService(uow, view, ev, comp, role, mem),
+		roles:       service.NewRoleService(uow, view, ev, role, mem, cat),
+		members:     service.NewMemberService(uow, view, ev, mem, role),
+		invitations: service.NewInvitationService(uow, view, ev, fi, 7*24*time.Hour, inv, mem, role, comp),
+		view:        service.NewViewService(uow, view, cat, role, comp, mem),
+		ev:          ev, idp: fi, rdb: rdb, ctx: ctx,
+	}
 }
 
 // seed loads a small "order" catalogue.
 func (e env) seed(t *testing.T) {
 	t.Helper()
-	_, err := e.svc.ApplyManifest(e.ctx, "order", catalogue.Manifest{
+	_, err := e.catalogue.ApplyManifest(e.ctx, "order", catalogue.Manifest{
 		Permissions: []catalogue.Permission{
 			{Key: "order:create", Consumer: true},
 			{Key: "order:read", Consumer: true},
@@ -126,12 +144,12 @@ func (e env) seed(t *testing.T) {
 }
 
 // company creates a company with admin sub "admin-<name>" and returns its id and admin caller.
-func (e env) company(t *testing.T, name string) (string, rbac.Caller) {
+func (e env) company(t *testing.T, name string) (string, service.Caller) {
 	t.Helper()
-	id, created, err := e.svc.CreateCompany(e.ctx, name, "admin-"+name)
+	id, created, err := e.companies.Create(e.ctx, name, "admin-"+name)
 	require.NoError(t, err)
 	require.True(t, created)
-	return id, rbac.Caller{Sub: "admin-" + name, CompanyID: id}
+	return id, service.Caller{Sub: "admin-" + name, CompanyID: id}
 }
 
 // hash reads a HASH of the gateway view (empty when the key is absent).
@@ -153,10 +171,10 @@ func (e env) version(t *testing.T, sub string) int64 {
 	return v
 }
 
-func requireStatus(t *testing.T, err error, kind rbac.Kind, code string) {
+func requireStatus(t *testing.T, err error, kind service.Kind, code string) {
 	t.Helper()
 	require.Error(t, err)
-	e, ok := rbac.AsError(err)
+	e, ok := service.AsError(err)
 	require.True(t, ok, "want domain error, got %v", err)
 	require.Equal(t, kind, e.Kind, e.Message)
 	if code != "" {
