@@ -1,4 +1,4 @@
-package rpcapi
+package admin
 
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -20,7 +20,8 @@ var invitationStatus = map[string]authzv1.InvitationStatus{
 	"expired":  authzv1.InvitationStatus_INVITATION_STATUS_EXPIRED,
 }
 
-func invitationPB(i rbac.Invitation) *authzv1.Invitation {
+// InvitationPB is an invitation as the proto carries it (InternalService returns it too).
+func InvitationPB(i rbac.Invitation) *authzv1.Invitation {
 	pb := &authzv1.Invitation{
 		Id: i.ID, CompanyId: i.CompanyID, CompanyName: i.CompanyName, Phone: i.Phone, RoleIds: i.RoleIDs,
 		InvitedBy: i.InvitedBy, Sub: i.Sub, ExpireTime: timestamppb.New(i.ExpiresAt), CreateTime: timestamppb.New(i.CreatedAt),

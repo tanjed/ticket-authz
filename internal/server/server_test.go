@@ -21,12 +21,14 @@ import (
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
+	"github.com/tanjed/bus2/authz/internal/admin"
 	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/health"
 	"github.com/tanjed/bus2/authz/internal/idp"
+	"github.com/tanjed/bus2/authz/internal/internalapi"
 	"github.com/tanjed/bus2/authz/internal/rbac"
 	"github.com/tanjed/bus2/authz/internal/redisview"
-	"github.com/tanjed/bus2/authz/internal/rpcapi"
+	"github.com/tanjed/bus2/authz/internal/router"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -65,13 +67,8 @@ func newStack(t *testing.T) stack {
 	testdb.Reset(t, pool)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := rbac.New(pool, events.Log{Logger: log}, noIdP{}, &redisview.Redis{C: redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})}, time.Hour)
-	h, err := build(Params{
-		Admin:    &rpcapi.Admin{Svc: svc, Log: log},
-		Internal: &rpcapi.Internal{Svc: svc, Log: log},
-		Health:   rpcapi.NewHealth(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log),
-		Log:      log,
-	})
-	require.NoError(t, err)
+	h := build(t, log, admin.New(svc, log), internalapi.New(svc, log),
+		health.NewHandler(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log))
 	serve := func(h http.Handler) string {
 		srv := httptest.NewUnstartedServer(h)
 		srv.Config = newHTTPServer(h, 0)
@@ -83,6 +80,23 @@ func newStack(t *testing.T) stack {
 	protocols.SetUnencryptedHTTP2(true)
 	return stack{h: h, publicURL: serve(h.public), internalURL: serve(h.internal),
 		client: &http.Client{Transport: &http.Transport{Protocols: protocols}}}
+}
+
+// handlers are the two listeners' handlers, built without opening any socket.
+type handlers struct {
+	public, internal http.Handler
+}
+
+// build has each service register itself, as the modules do, and builds each listener's handler.
+func build(t *testing.T, log *slog.Logger, a *admin.Admin, in *internalapi.Internal, h *health.Handler) handlers {
+	t.Helper()
+	r := router.New(log)
+	a.Register(r)
+	in.Register(r)
+	h.Register(r)
+	public, internal, err := r.Handlers()
+	require.NoError(t, err)
+	return handlers{public: public, internal: internal}
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string, headers map[string]string) (int, map[string]any) {
@@ -195,7 +209,7 @@ func TestGRPC_BothServices(t *testing.T) {
 
 	_, err = internal.GetClaims(ctx, &authzv1.GetClaimsRequest{Sub: "nobody"})
 	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	require.Equal(t, "not_a_member", rpcapi.Reason(err), "the domain reason survives to gRPC")
+	require.Equal(t, "not_a_member", router.Reason(err), "the domain reason survives to gRPC")
 
 	md := []string{"x-bus-subject", "u1", "x-bus-company-id", co.GetCompanyId(), "x-bus-user-type", "provider"}
 	roles, err := admin.ListRoles(caller(ctx, md...), &authzv1.ListRolesRequest{})
@@ -261,8 +275,7 @@ func TestHealth(t *testing.T) {
 func TestHealth_Unavailable(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	down := health.New([]health.Probe{{Name: "db", Check: func(context.Context) error { return fmt.Errorf("dial tcp 10.0.0.5:5432: refused") }}})
-	h, err := build(Params{Admin: &rpcapi.Admin{}, Internal: &rpcapi.Internal{}, Health: rpcapi.NewHealth(down, log), Log: log})
-	require.NoError(t, err)
+	h := build(t, log, &admin.Admin{}, &internalapi.Internal{}, health.NewHandler(down, log))
 
 	code, body := do(t, h.internal, "GET", "/ready", "", nil)
 	require.Equal(t, http.StatusServiceUnavailable, code)

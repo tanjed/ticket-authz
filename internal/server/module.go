@@ -1,25 +1,7 @@
 package server
 
-import (
-	"context"
+import "go.uber.org/fx"
 
-	"go.uber.org/fx"
-)
-
-// Module runs the two listeners; include it last, so they open after everything else started.
-var Module = fx.Module("server",
-	fx.Provide(New),
-	fx.Invoke(runOnStart),
-)
-
-func runOnStart(lc fx.Lifecycle, sd fx.Shutdowner, s *Servers) {
-	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			return s.Start(func(error) { _ = sd.Shutdown(fx.ExitCode(1)) })
-		},
-		OnStop: func(ctx context.Context) error {
-			s.Stop(ctx)
-			return nil
-		},
-	})
-}
+// Module runs the two listeners; include it last, so they open after everything else started
+// and every module's fx.Invoke has registered its services with the router.
+var Module = fx.Module("server", fx.Provide(New), fx.Invoke((*Server).Run))

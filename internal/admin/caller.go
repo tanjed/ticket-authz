@@ -1,4 +1,4 @@
-package rpcapi
+package admin
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/tanjed/bus2/authz/internal/rbac"
+	"github.com/tanjed/bus2/authz/internal/router"
 )
 
 // The caller as the gateway passes it: HTTP headers for REST and Connect, metadata (also HTTP
@@ -28,7 +29,7 @@ func callerFrom(ctx context.Context) (rbac.Caller, error) {
 		return "" // absent, or sent twice: trust neither
 	}
 	if get(MDUserType) != "provider" {
-		return rbac.Caller{}, withReason(connect.CodePermissionDenied, "provider_only", "only company users can manage roles")
+		return rbac.Caller{}, router.WithReason(connect.CodePermissionDenied, "provider_only", "only company users can manage roles")
 	}
 	return rbac.Caller{Sub: get(MDSubject), CompanyID: get(MDCompany)}, nil
 }

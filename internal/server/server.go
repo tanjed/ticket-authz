@@ -1,6 +1,6 @@
 // Package server runs Authz's two listeners: public (company admin API, reachable only from the
-// gateway) and internal (seed Jobs, the IdP). Each serves Connect, gRPC, gRPC-Web
-// and REST on one port (HTTP/1.1 and cleartext HTTP/2).
+// gateway) and internal (seed Jobs, the IdP). Each serves Connect, gRPC, gRPC-Web and REST on
+// one port (HTTP/1.1 and cleartext HTTP/2).
 package server
 
 import (
@@ -9,67 +9,74 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	"go.uber.org/fx"
 
-	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/config"
+	"github.com/tanjed/bus2/authz/internal/router"
 )
 
-// Params is what the servers need; fx fills it (internal/ioc), tests build it.
+// Server is the two listeners, registered as fx lifecycle hooks by Run.
+type Server struct {
+	lc     fx.Lifecycle
+	sd     fx.Shutdowner
+	cfg    config.Config
+	routes router.Handlers
+	log    *slog.Logger
+}
+
+// Params is what the server needs; fx fills it.
 type Params struct {
 	fx.In
 
-	Cfg      config.Config
-	Admin    authzv1connect.AdminServiceHandler
-	Internal authzv1connect.InternalServiceHandler
-	Health   authzv1connect.HealthServiceHandler
-	Log      *slog.Logger
+	Lifecycle fx.Lifecycle
+	Shutdown  fx.Shutdowner
+	Config    config.Config
+	Routes    router.Handlers
+	Log       *slog.Logger
 }
 
-// handlers are the two listeners' handlers, built without opening any socket (tests use them).
-type handlers struct {
-	public, internal http.Handler
+func New(p Params) *Server {
+	return &Server{lc: p.Lifecycle, sd: p.Shutdown, cfg: p.Config, routes: p.Routes, log: p.Log}
 }
 
-// build turns wire (routes.go) into one handler per listener.
-func build(p Params) (handlers, error) {
-	public, internal := wire(p)
-	pub, err := public.router()
+// Run adds one lifecycle hook per listener. A taken port fails the start, and fx stops the
+// listener already open; a listener that stops unexpectedly shuts the app down.
+func (s *Server) Run() error {
+	public, internal, err := s.routes.Handlers()
 	if err != nil {
-		return handlers{}, err
+		return err
 	}
-	in, err := internal.router()
-	if err != nil {
-		return handlers{}, err
-	}
-	return handlers{public: pub, internal: in}, nil
+	s.serve("public", s.cfg.PublicAddr, public)
+	s.serve("internal", s.cfg.InternalAddr, internal)
+	return nil
 }
 
-// Servers are the two listeners.
-type Servers struct {
-	listeners []listener
-	log       *slog.Logger
-}
-
-// listener is one listener: its server, and the address it opens.
-type listener struct {
-	name string
-	addr string
-	srv  *http.Server
-}
-
-func New(p Params) (*Servers, error) {
-	h, err := build(p)
-	if err != nil {
-		return nil, err
-	}
-	return &Servers{log: p.Log, listeners: []listener{
-		{"public", p.Cfg.PublicAddr, newHTTPServer(h.public, 30*time.Second)},
-		{"internal", p.Cfg.InternalAddr, newHTTPServer(h.internal, 30*time.Second)},
-	}}, nil
+func (s *Server) serve(name, addr string, h http.Handler) {
+	srv := newHTTPServer(h, 30*time.Second)
+	s.lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			sock, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+			s.log.Info("listening", "listener", name, "addr", addr)
+			go func() {
+				if err := srv.Serve(sock); !errors.Is(err, http.ErrServerClosed) {
+					s.log.Error("listener failed", "listener", name, "err", err)
+					_ = s.sd.Shutdown(fx.ExitCode(1))
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			if err := srv.Shutdown(ctx); err != nil {
+				_ = srv.Close() // requests still open when the stop timeout ends
+			}
+			return nil
+		},
+	})
 }
 
 // newHTTPServer speaks HTTP/1.1 and cleartext HTTP/2 (h2c): gRPC needs HTTP/2, and TLS ends
@@ -79,43 +86,4 @@ func newHTTPServer(h http.Handler, writeTimeout time.Duration) *http.Server {
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
 	return &http.Server{Handler: h, Protocols: protocols, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: writeTimeout}
-}
-
-// Start opens every socket first, so a taken port fails the start rather than a later crash,
-// then serves each in the background. onFail is called if a listener stops unexpectedly.
-func (s *Servers) Start(onFail func(error)) error {
-	socks := make([]net.Listener, 0, len(s.listeners))
-	for _, l := range s.listeners {
-		sock, err := net.Listen("tcp", l.addr)
-		if err != nil {
-			for _, open := range socks {
-				_ = open.Close()
-			}
-			return err
-		}
-		socks = append(socks, sock)
-	}
-	for i, l := range s.listeners {
-		go func() {
-			s.log.Info("listening", "listener", l.name, "addr", l.addr)
-			if err := l.srv.Serve(socks[i]); !errors.Is(err, http.ErrServerClosed) {
-				s.log.Error("listener failed", "listener", l.name, "err", err)
-				onFail(err)
-			}
-		}()
-	}
-	return nil
-}
-
-// Stop stops both listeners in parallel: open long polls on one must not use up the other's time.
-func (s *Servers) Stop(ctx context.Context) {
-	var wg sync.WaitGroup
-	for _, l := range s.listeners {
-		wg.Go(func() {
-			if err := l.srv.Shutdown(ctx); err != nil {
-				_ = l.srv.Close() // long polls still open when the stop timeout ends
-			}
-		})
-	}
-	wg.Wait()
 }

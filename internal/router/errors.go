@@ -1,6 +1,4 @@
-// Package rpcapi implements the proto services (AdminService, InternalService) over rbac, as
-// Connect handlers. Vanguard serves the same handlers as Connect, gRPC, gRPC-Web and REST.
-package rpcapi
+package router
 
 import (
 	"errors"
@@ -24,9 +22,10 @@ var kindCodes = map[rbac.Kind]connect.Code{
 	rbac.KindUnavailable:  connect.CodeUnavailable,
 }
 
-// toError turns a domain error into a Connect error carrying its reason; anything else (Postgres
-// down, a bug) becomes Internal without details, and is logged.
-func toError(log *slog.Logger, err error) error {
+// Error turns a domain error into a Connect error carrying its reason; anything else (Postgres
+// down, a bug) becomes Internal without details, and is logged. Handlers return it for every
+// error from rbac.
+func Error(log *slog.Logger, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -38,10 +37,12 @@ func toError(log *slog.Logger, err error) error {
 		log.Error("request failed", "err", err)
 		return connect.NewError(connect.CodeInternal, errors.New("internal error"))
 	}
-	return withReason(kindCodes[e.Kind], e.Code, e.Message)
+	return WithReason(kindCodes[e.Kind], e.Code, e.Message)
 }
 
-func withReason(code connect.Code, reason, msg string) error {
+// WithReason is a Connect error with a stable reason (ErrorInfo), for errors a handler raises
+// itself.
+func WithReason(code connect.Code, reason, msg string) error {
 	ce := connect.NewError(code, errors.New(msg))
 	if d, err := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason, Domain: ErrorDomain}); err == nil {
 		ce.AddDetail(d)
