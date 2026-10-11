@@ -1,5 +1,10 @@
 domain: bus.example
 replicas: 3
 image: { repository: registry.bus.example/authz, tag: "0.1.0" }   # PLACEHOLDER: the image built from this repo
+otel:
+  traces: true
+  metrics: true
+  sampler: parentbased_traceidratio
+  samplerArg: "0.1"                                              # 10% of new traces; the caller's decision is kept
 kafka:
   brokers: kafka.bus.example:9092                                # PLACEHOLDER: this environment's Kafka

@@ -31,6 +31,24 @@ spec:
             - { name: AUTHZ_IDP_INTERNAL_URL, value: {{ .Values.idpInternalUrl | quote }} }
             - { name: AUTHZ_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
             - { name: AUTHZ_KAFKA_TOPIC, value: {{ .Values.kafka.topic | quote }} }
+            # Traces and app metrics (internal/telemetry); logs and infra metrics need nothing here.
+            - { name: OTEL_TRACES_ENABLED, value: {{ .Values.otel.traces | quote }} }
+            - { name: OTEL_METRICS_ENABLED, value: {{ .Values.otel.metrics | quote }} }
+            {{- if or .Values.otel.traces .Values.otel.metrics }}
+            - name: NODE_IP
+              valueFrom: { fieldRef: { fieldPath: status.hostIP } }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.otel.endpoint | default "http://$(NODE_IP):4317" | quote }} }
+            - { name: OTEL_SERVICE_NAME, value: {{ .Values.otel.serviceName | quote }} }
+            - { name: OTEL_TRACES_SAMPLER, value: {{ .Values.otel.sampler | quote }} }
+            {{- with .Values.otel.samplerArg }}
+            - { name: OTEL_TRACES_SAMPLER_ARG, value: {{ . | quote }} }
+            {{- end }}
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - { name: OTEL_RESOURCE_ATTRIBUTES, value: "k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(POD_NAMESPACE),deployment.environment={{ .Values.domain }}" }
+            {{- end }}
           # HealthService: liveness checks no dependency (a database outage never restarts pods),
           # readiness checks them all.
           readinessProbe: { httpGet: { path: /ready, port: internal } }

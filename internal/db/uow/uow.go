@@ -85,7 +85,7 @@ func (u *UnitOfWork) UnitOfWork(ctx context.Context, timeout time.Duration, fn f
 	// (it never masks the error already being returned).
 	defer func() {
 		if err := tx.Rollback(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			u.log.Error("unitofwork: rollback failed", "error", err)
+			u.log.ErrorContext(ctx, "unitofwork: rollback failed", "error", err)
 		}
 	}()
 

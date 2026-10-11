@@ -12,7 +12,6 @@
 package router
 
 import (
-	"log/slog"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -52,15 +51,14 @@ func Public[T any](mount Mounter[T]) fx.Option   { return provide(PublicListener
 func Internal[T any](mount Mounter[T]) fx.Option { return provide(InternalListener, mount) }
 
 func provide[T any](l Listener, mount Mounter[T]) fx.Option {
-	return fx.Provide(fx.Annotate(func(impl T, log *slog.Logger) Service {
-		return Mount(l, mount, impl, log)
+	return fx.Provide(fx.Annotate(func(impl T, opts HandlerOptions) Service {
+		return Mount(l, mount, impl, opts)
 	}, fx.ResultTags(ServicesGroup)))
 }
 
-// Mount builds a Service: mount over impl, with Authz's handler options (JSON codec, panics
-// logged as Internal).
-func Mount[T any](l Listener, mount Mounter[T], impl T, log *slog.Logger) Service {
-	path, h := mount(impl, handlerOptions(log)...)
+// Mount builds a Service: mount over impl, with Authz's handler options (NewHandlerOptions).
+func Mount[T any](l Listener, mount Mounter[T], impl T, opts HandlerOptions) Service {
+	path, h := mount(impl, opts...)
 	return Service{Listener: l, Path: path, Handler: h}
 }
 

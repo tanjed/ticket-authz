@@ -36,13 +36,13 @@ var _ connect.Interceptor = errorInterceptor{}
 func (i errorInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		res, err := next(ctx, req)
-		return res, i.toConnect(req.Spec().Procedure, err)
+		return res, i.toConnect(ctx, req.Spec().Procedure, err)
 	}
 }
 
 func (i errorInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return i.toConnect(conn.Spec().Procedure, next(ctx, conn))
+		return i.toConnect(ctx, conn.Spec().Procedure, next(ctx, conn))
 	}
 }
 
@@ -53,7 +53,7 @@ func (errorInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) co
 // toConnect: an application error becomes its Connect code with the code as ErrorInfo.reason; a Connect
 // error (the framework's own, e.g. a body that does not decode) passes through; anything else
 // (Postgres down, a bug) is logged and becomes Internal, without details.
-func (i errorInterceptor) toConnect(procedure string, err error) error {
+func (i errorInterceptor) toConnect(ctx context.Context, procedure string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -63,7 +63,7 @@ func (i errorInterceptor) toConnect(procedure string, err error) error {
 	if ce := new(connect.Error); errors.As(err, &ce) {
 		return err
 	}
-	i.log.Error("request failed", "procedure", procedure, "err", err)
+	i.log.ErrorContext(ctx, "request failed", "procedure", procedure, "err", err)
 	return connect.NewError(connect.CodeInternal, errors.New("internal error"))
 }
 

@@ -34,6 +34,18 @@ apisixRoute:
   enabled: true
   ingressClassName: apisix
 
+# Observability, like Datadog: the node's agent (an OpenTelemetry collector DaemonSet, ../Infra)
+# collects this pod's logs (stdout) and its CPU and memory with nothing set here. The process adds
+# what only it can see, when turned on: traces and app metrics, over OTLP to the agent on its own
+# node (status.hostIP:4317, like DD_AGENT_HOST) unless endpoint says otherwise.
+otel:
+  traces: false
+  metrics: false
+  endpoint: ""        # empty: http://<node IP>:4317 (the agent's hostPort)
+  serviceName: authz
+  sampler: parentbased_always_on   # OTEL_TRACES_SAMPLER (e.g. parentbased_traceidratio with samplerArg)
+  samplerArg: ""
+
 resources: {}
 
 postgres:

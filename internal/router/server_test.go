@@ -124,10 +124,12 @@ type handlers struct {
 // each listener's handler.
 func build(t *testing.T, log *slog.Logger, a *admin.Admin, in *internalapi.Internal, h *healthhandler.Handler) handlers {
 	t.Helper()
+	opts, err := router.NewHandlerOptions(log)
+	require.NoError(t, err)
 	r, err := router.New(router.Params{Log: log, Services: []router.Service{
-		router.Mount(router.PublicListener, authzv1connect.NewAdminServiceHandler, authzv1connect.AdminServiceHandler(a), log),
-		router.Mount(router.InternalListener, authzv1connect.NewInternalServiceHandler, authzv1connect.InternalServiceHandler(in), log),
-		router.Mount(router.InternalListener, authzv1connect.NewHealthServiceHandler, authzv1connect.HealthServiceHandler(h), log),
+		router.Mount(router.PublicListener, authzv1connect.NewAdminServiceHandler, authzv1connect.AdminServiceHandler(a), opts),
+		router.Mount(router.InternalListener, authzv1connect.NewInternalServiceHandler, authzv1connect.InternalServiceHandler(in), opts),
+		router.Mount(router.InternalListener, authzv1connect.NewHealthServiceHandler, authzv1connect.HealthServiceHandler(h), opts),
 	}})
 	require.NoError(t, err)
 	public, internal := r.Handlers()

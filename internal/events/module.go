@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/plugin/kotel"
 	"go.uber.org/fx"
 
 	"github.com/tanjed/bus2/authz/internal/config"
@@ -25,8 +26,12 @@ func newPublisher(lc fx.Lifecycle, cfg config.Config, log *slog.Logger) (Publish
 	return k, nil
 }
 
+// New: every produce is a span whose trace context travels in the record headers, and the
+// client's broker stats are metrics (kotel).
 func New(brokers []string, topic string, log *slog.Logger) (*Kafka, error) {
-	c, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.DefaultProduceTopic(topic), kgo.ProduceRequestTimeout(5*time.Second))
+	tel := kotel.NewKotel(kotel.WithTracer(kotel.NewTracer()), kotel.WithMeter(kotel.NewMeter()))
+	c, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.DefaultProduceTopic(topic), kgo.ProduceRequestTimeout(5*time.Second),
+		kgo.WithHooks(tel.Hooks()...))
 	if err != nil {
 		return nil, err
 	}

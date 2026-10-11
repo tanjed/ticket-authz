@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"connectrpc.com/vanguard"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -47,17 +48,26 @@ func (jsonCodec) Unmarshal(b []byte, v any) error {
 	return jsonUnmarshal.Unmarshal(b, m)
 }
 
-// handlerOptions: the JSON codec, the error interceptor (the one place errors are formatted), and
-// panics become Internal (logged), on every protocol, REST included.
-func handlerOptions(log *slog.Logger) []connect.HandlerOption {
-	return []connect.HandlerOption{
+// HandlerOptions are every service's Connect handler options (router.Module provides them).
+type HandlerOptions []connect.HandlerOption
+
+// NewHandlerOptions: the JSON codec; the telemetry interceptor (a server span and the RPC metrics
+// per call, on every protocol, REST included; it continues the caller's trace, the gateway's)
+// around the error interceptor (the one place errors are formatted), so the span records the
+// final code; and panics become Internal (logged).
+func NewHandlerOptions(log *slog.Logger) (HandlerOptions, error) {
+	tel, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
+	if err != nil {
+		return nil, err
+	}
+	return HandlerOptions{
 		connect.WithCodec(jsonCodec{}),
-		connect.WithInterceptors(apperror.Interceptor(log)),
-		connect.WithRecover(func(_ context.Context, spec connect.Spec, _ http.Header, r any) error {
-			log.Error("panic", "procedure", spec.Procedure, "panic", r, "stack", string(debug.Stack()))
+		connect.WithInterceptors(tel, apperror.Interceptor(log)),
+		connect.WithRecover(func(ctx context.Context, spec connect.Spec, _ http.Header, r any) error {
+			log.ErrorContext(ctx, "panic", "procedure", spec.Procedure, "panic", r, "stack", string(debug.Stack()))
 			return connect.NewError(connect.CodeInternal, errors.New("internal error"))
 		}),
-	}
+	}, nil
 }
 
 // newTranscoder serves Connect handlers as Connect, gRPC, gRPC-Web and, from the proto's

@@ -42,7 +42,7 @@ func (r *Redis) do(ctx context.Context, what string, fn func(ctx context.Context
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), publishTimeout)
 	defer cancel()
 	if err := fn(ctx); err != nil {
-		r.Log.Error("redis publish failed; the gateway reads stale data until the next change", "what", what, "err", err)
+		r.Log.ErrorContext(ctx, "redis publish failed; the gateway reads stale data until the next change", "what", what, "err", err)
 	}
 }
 

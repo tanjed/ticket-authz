@@ -70,6 +70,26 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 | `AUTHZ_IDP_INTERNAL_URL` | The IdP UI's cluster-internal URL (invitations; required for `serve`) |
 | `AUTHZ_KAFKA_BROKERS`, `AUTHZ_KAFKA_TOPIC` | Events (`authz.events`); no brokers: events are only logged |
 | `AUTHZ_INVITE_TTL` | Invitation lifetime (`168h`) |
+| `OTEL_TRACES_ENABLED`, `OTEL_METRICS_ENABLED` | `true` exports traces / app metrics over OTLP (default off). Logs need no setting |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The agent (`localhost:4317` by default; compose: `http://infra-agent:4317`; chart: the node's) |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER`, ... | Standard OpenTelemetry settings, read by the SDK |
+
+## Observability
+
+Like Datadog: an agent per machine (or per node: an OpenTelemetry collector, `../Infra`) collects
+what it can see from outside, and the process adds only what it alone can see.
+
+| Signal | Collected by | In this service | Setting |
+|---|---|---|---|
+| Logs | the agent, from the container's stdout | JSON on stdout (`internal/logging`); a record logged with a context (`InfoContext`, `ErrorContext`, ...) inside a span carries `trace_id`/`span_id`, which link it to its trace | none |
+| Infra metrics (CPU, memory, network, disk) | the agent, from the container runtime and the host | nothing | none |
+| Traces | the process: a span per RPC (every protocol; it continues the caller's `traceparent`), with child spans per Postgres query, Redis command, IdP call, Kafka produce | `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
+| App metrics | the process: RPC durations, Postgres and Redis pools, Kafka client, Go runtime | `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
+
+Traces and app metrics go over OTLP to `OTEL_EXPORTER_OTLP_ENDPOINT`: the node's agent (in the
+chart, `http://<node IP>:4317`). An unreachable agent never fails the boot. Locally, `../Infra`'s
+agent sends traces to Jaeger (http://localhost:16686), metrics to Prometheus (http://localhost:9090)
+and logs to Loki; Grafana (http://localhost:3000) shows all three and links a log line to its trace.
 
 ## Layout
 
@@ -88,6 +108,8 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 | `internal/router` | the two listeners: services per listener (fx group), Vanguard transcoders, chi routers, Connect options, the error interceptor |
 | `internal/cache` | publishes the authorization state to Redis (`Publisher`; the key contract with `../APISIX`) |
 | `internal/health` | readiness probes (each dependency's package contributes one) |
+| `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
+| `internal/logging` | the slog logger: JSON on stdout with trace ids (the agent collects it) |
 | `manifest/` | Authz's own manifest (its admin API routes), seeded at startup |
 | `migrations/` | goose SQL |
 | `chart/`, `helmvars/` | Helm chart (Deployment, Service, NetworkPolicy, ApisixRoute, Postgres) |

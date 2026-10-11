@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -14,14 +15,25 @@ import (
 	"github.com/tanjed/bus2/authz/migrations"
 )
 
+// Open connects a pool: every query is a span (otelpgx) and the pool's stats are metrics, on the
+// global providers (internal/telemetry).
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, err
+	}
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer(otelpgx.WithTrimSQLInSpanName())
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("postgres: %w", err)
+	}
+	if err := otelpgx.RecordStats(pool); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("postgres metrics: %w", err)
 	}
 	return pool, nil
 }

@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +27,11 @@ type Config struct {
 	KafkaBrokers   []string
 	KafkaTopic     string
 	InviteTTL      time.Duration
+	// OTelTraces and OTelMetrics turn on the in-process telemetry (internal/telemetry): traces and
+	// app metrics over OTLP to the node's agent (OTEL_EXPORTER_OTLP_ENDPOINT). Logs need no
+	// setting: the agent collects stdout.
+	OTelTraces  bool
+	OTelMetrics bool
 }
 
 // Load reads configuration through getenv (pass os.Getenv in production).
@@ -47,6 +53,15 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	var err error
+	for name, dst := range map[string]*bool{"OTEL_TRACES_ENABLED": &cfg.OTelTraces, "OTEL_METRICS_ENABLED": &cfg.OTelMetrics} {
+		if v := getenv(name); v != "" {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("%s must be true or false", name)
+			}
+			*dst = b
+		}
+	}
 	if v := getenv("AUTHZ_INVITE_TTL"); v != "" {
 		if cfg.InviteTTL, err = time.ParseDuration(v); err != nil || cfg.InviteTTL <= 0 {
 			return Config{}, fmt.Errorf("AUTHZ_INVITE_TTL must be a positive duration like 168h")

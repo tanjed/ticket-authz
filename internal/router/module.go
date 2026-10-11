@@ -14,7 +14,7 @@ import (
 // runs the listeners. Include it last, so they open after every other start hook (the seed, the
 // gateway view rebuild).
 var Module = fx.Module("router",
-	fx.Provide(New),
+	fx.Provide(New, NewHandlerOptions),
 	fx.Invoke((*Router).Run),
 )
 

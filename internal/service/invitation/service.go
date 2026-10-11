@@ -73,7 +73,7 @@ func (s *Service) Create(ctx context.Context, c access.Caller, in Input) (Invita
 	}
 
 	if err := s.idp.SendInvitation(ctx, idp.Invitation{ID: inv.ID, Phone: inv.Phone, CompanyName: inv.CompanyName, ExpiresAt: inv.ExpiresAt}); err != nil {
-		slog.Error("idp send invitation failed", "err", err)
+		slog.ErrorContext(ctx, "idp send invitation failed", "err", err)
 		s.deleteUnsent(context.WithoutCancel(ctx), inv.ID)
 		return Invitation{}, idpUnavailable()
 	}
@@ -109,7 +109,7 @@ func (s *Service) checkGrantable(ctx context.Context, c access.Caller, roleIDs [
 func (s *Service) checkInvitable(ctx context.Context, phone string) error {
 	sub, err := s.idp.IdentityByPhone(ctx, phone)
 	if err != nil {
-		slog.Error("idp lookup failed", "err", err)
+		slog.ErrorContext(ctx, "idp lookup failed", "err", err)
 		return idpUnavailable()
 	}
 	if sub == "" {
@@ -130,7 +130,7 @@ func (s *Service) deleteUnsent(ctx context.Context, id string) {
 	if err := s.uow.UnitOfWork(ctx, uow.Timeout, func(ctx context.Context) error {
 		return s.invitations.Delete(ctx, id)
 	}); err != nil {
-		slog.Error("could not delete unsent invitation", "id", id, "err", err)
+		slog.ErrorContext(ctx, "could not delete unsent invitation", "id", id, "err", err)
 	}
 }
 
