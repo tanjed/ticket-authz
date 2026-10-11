@@ -43,10 +43,10 @@ func New(p Params) (*Router, error) {
 	}
 	r := &Router{lc: p.Lifecycle, sd: p.Shutdown, cfg: p.Config, log: p.Log}
 	var err error
-	if r.public, err = handler(p.Log, public); err != nil {
+	if r.public, err = handler(public); err != nil {
 		return nil, err
 	}
-	if r.internal, err = handler(p.Log, internal); err != nil {
+	if r.internal, err = handler(internal); err != nil {
 		return nil, err
 	}
 	return r, nil

@@ -12,7 +12,6 @@
 package router
 
 import (
-	"log/slog"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -63,12 +62,12 @@ func Mount[T any](l Listener, mount Mounter[T], impl T, opts HandlerOptions) Ser
 	return Service{Listener: l, Path: path, Handler: h}
 }
 
-// handler builds one listener's handler, with one access log line per request (accessLog). Each service's RPC path goes to its transcoder as it
+// handler builds one listener's handler. Each service's RPC path goes to its transcoder as it
 // is (Connect, gRPC, gRPC-Web keep their own errors); every other path is REST (the transcoder
 // matches the google.api.http annotations, unknown paths are 404) behind apperror.REST.
-func handler(log *slog.Logger, services []Service) (http.Handler, error) {
+func handler(services []Service) (http.Handler, error) {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, accessLog(log), middleware.Recoverer)
+	r.Use(middleware.RequestID, middleware.Recoverer)
 	if len(services) == 0 {
 		return r, nil
 	}
