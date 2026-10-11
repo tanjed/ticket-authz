@@ -53,7 +53,8 @@ type HandlerOptions []connect.HandlerOption
 
 // NewHandlerOptions: the JSON codec; the telemetry interceptor (a server span and the RPC metrics
 // per call, on every protocol, REST included; it continues the caller's trace, the gateway's)
-// around the error interceptor (the one place errors are formatted), so the span records the
+// around the call recorder (the procedure, code and span for the access log's line) around the
+// error interceptor (the one place errors are formatted), so the span and the line record the
 // final code; and panics become Internal (logged).
 func NewHandlerOptions(log *slog.Logger) (HandlerOptions, error) {
 	tel, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
@@ -62,7 +63,7 @@ func NewHandlerOptions(log *slog.Logger) (HandlerOptions, error) {
 	}
 	return HandlerOptions{
 		connect.WithCodec(jsonCodec{}),
-		connect.WithInterceptors(tel, apperror.Interceptor(log)),
+		connect.WithInterceptors(tel, recordCall(), apperror.Interceptor(log)),
 		connect.WithRecover(func(ctx context.Context, spec connect.Spec, _ http.Header, r any) error {
 			log.ErrorContext(ctx, "panic", "procedure", spec.Procedure, "panic", r, "stack", string(debug.Stack()))
 			return connect.NewError(connect.CodeInternal, errors.New("internal error"))
