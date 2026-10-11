@@ -5,41 +5,43 @@ package admin
 
 import (
 	"context"
-	"log/slog"
 
 	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
-	"github.com/tanjed/bus2/authz/internal/router"
-	"github.com/tanjed/bus2/authz/internal/service"
+	"github.com/tanjed/bus2/authz/internal/service/access"
+	"github.com/tanjed/bus2/authz/internal/service/catalogue"
+	"github.com/tanjed/bus2/authz/internal/service/invitation"
+	"github.com/tanjed/bus2/authz/internal/service/member"
+	"github.com/tanjed/bus2/authz/internal/service/role"
 )
 
 // The services AdminService calls, each as narrow as its methods here.
 type (
 	Permissions interface {
-		Permissions(ctx context.Context) ([]service.PermissionInfo, error)
+		Permissions(ctx context.Context) ([]catalogue.Permission, error)
 	}
 	Roles interface {
-		List(ctx context.Context, c service.Caller) ([]service.Role, error)
-		Get(ctx context.Context, c service.Caller, id string) (service.Role, error)
-		Create(ctx context.Context, c service.Caller, in service.RoleInput) (service.Role, error)
-		Update(ctx context.Context, c service.Caller, id string, in service.RoleInput) (service.Role, error)
-		Delete(ctx context.Context, c service.Caller, id string) error
+		List(ctx context.Context, c access.Caller) ([]role.Role, error)
+		Get(ctx context.Context, c access.Caller, id string) (role.Role, error)
+		Create(ctx context.Context, c access.Caller, in role.Input) (role.Role, error)
+		Update(ctx context.Context, c access.Caller, id string, in role.Input) (role.Role, error)
+		Delete(ctx context.Context, c access.Caller, id string) error
 	}
 	Members interface {
-		List(ctx context.Context, c service.Caller) ([]service.Member, error)
-		SetRoles(ctx context.Context, c service.Caller, sub string, roleIDs []string) error
-		Remove(ctx context.Context, c service.Caller, sub string) error
+		List(ctx context.Context, c access.Caller) ([]member.Member, error)
+		SetRoles(ctx context.Context, c access.Caller, sub string, roleIDs []string) error
+		Remove(ctx context.Context, c access.Caller, sub string) error
 	}
 	Invitations interface {
-		List(ctx context.Context, c service.Caller) ([]service.Invitation, error)
-		Create(ctx context.Context, c service.Caller, in service.InvitationInput) (service.Invitation, error)
+		List(ctx context.Context, c access.Caller) ([]invitation.Invitation, error)
+		Create(ctx context.Context, c access.Caller, in invitation.Input) (invitation.Invitation, error)
 	}
 )
 
 var (
-	_ Permissions                        = (*service.CatalogueService)(nil)
-	_ Roles                              = (*service.RoleService)(nil)
-	_ Members                            = (*service.MemberService)(nil)
-	_ Invitations                        = (*service.InvitationService)(nil)
+	_ Permissions                        = (*catalogue.Service)(nil)
+	_ Roles                              = (*role.Service)(nil)
+	_ Members                            = (*member.Service)(nil)
+	_ Invitations                        = (*invitation.Service)(nil)
 	_ authzv1connect.AdminServiceHandler = (*Admin)(nil)
 )
 
@@ -50,15 +52,4 @@ type Admin struct {
 	Roles       Roles
 	Members     Members
 	Invitations Invitations
-	Log         *slog.Logger
-}
-
-func New(perms *service.CatalogueService, roles *service.RoleService, members *service.MemberService, invitations *service.InvitationService, log *slog.Logger) *Admin {
-	return &Admin{Permissions: perms, Roles: roles, Members: members, Invitations: invitations, Log: log}
-}
-
-// Register serves AdminService on the public listener only: it trusts the gateway's X-Bus-*
-// headers.
-func (a *Admin) Register(r router.Registrar) {
-	r.Public(authzv1connect.NewAdminServiceHandler(a, r.HandlerOptions()...))
 }

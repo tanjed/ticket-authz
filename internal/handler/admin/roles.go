@@ -4,8 +4,7 @@ import (
 	"context"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
-	"github.com/tanjed/bus2/authz/internal/router"
-	"github.com/tanjed/bus2/authz/internal/service"
+	"github.com/tanjed/bus2/authz/internal/service/role"
 )
 
 func (a *Admin) ListRoles(ctx context.Context, _ *authzv1.ListRolesRequest) (*authzv1.ListRolesResponse, error) {
@@ -15,7 +14,7 @@ func (a *Admin) ListRoles(ctx context.Context, _ *authzv1.ListRolesRequest) (*au
 	}
 	roles, err := a.Roles.List(ctx, c)
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	out := &authzv1.ListRolesResponse{}
 	for _, r := range roles {
@@ -31,7 +30,7 @@ func (a *Admin) GetRole(ctx context.Context, req *authzv1.GetRoleRequest) (*auth
 	}
 	r, err := a.Roles.Get(ctx, c, req.GetId())
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.GetRoleResponse{Role: rolePB(r)}, nil
 }
@@ -41,9 +40,9 @@ func (a *Admin) CreateRole(ctx context.Context, req *authzv1.CreateRoleRequest) 
 	if err != nil {
 		return nil, err
 	}
-	r, err := a.Roles.Create(ctx, c, service.RoleInput{Name: req.GetName(), Permissions: req.GetPermissions()})
+	r, err := a.Roles.Create(ctx, c, role.Input{Name: req.GetName(), Permissions: req.GetPermissions()})
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.CreateRoleResponse{Role: rolePB(r)}, nil
 }
@@ -53,9 +52,9 @@ func (a *Admin) UpdateRole(ctx context.Context, req *authzv1.UpdateRoleRequest) 
 	if err != nil {
 		return nil, err
 	}
-	r, err := a.Roles.Update(ctx, c, req.GetId(), service.RoleInput{Name: req.GetName(), Permissions: req.GetPermissions()})
+	r, err := a.Roles.Update(ctx, c, req.GetId(), role.Input{Name: req.GetName(), Permissions: req.GetPermissions()})
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.UpdateRoleResponse{Role: rolePB(r)}, nil
 }
@@ -66,7 +65,7 @@ func (a *Admin) DeleteRole(ctx context.Context, req *authzv1.DeleteRoleRequest) 
 		return nil, err
 	}
 	if err := a.Roles.Delete(ctx, c, req.GetId()); err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.DeleteRoleResponse{}, nil
 }

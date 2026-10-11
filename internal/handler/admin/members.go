@@ -6,7 +6,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
-	"github.com/tanjed/bus2/authz/internal/router"
 )
 
 func (a *Admin) ListMembers(ctx context.Context, _ *authzv1.ListMembersRequest) (*authzv1.ListMembersResponse, error) {
@@ -16,7 +15,7 @@ func (a *Admin) ListMembers(ctx context.Context, _ *authzv1.ListMembersRequest) 
 	}
 	members, err := a.Members.List(ctx, c)
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	out := &authzv1.ListMembersResponse{}
 	for _, m := range members {
@@ -31,7 +30,7 @@ func (a *Admin) SetMemberRoles(ctx context.Context, req *authzv1.SetMemberRolesR
 		return nil, err
 	}
 	if err := a.Members.SetRoles(ctx, c, req.GetSub(), req.GetRoleIds()); err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.SetMemberRolesResponse{}, nil
 }
@@ -42,7 +41,7 @@ func (a *Admin) RemoveMember(ctx context.Context, req *authzv1.RemoveMemberReque
 		return nil, err
 	}
 	if err := a.Members.Remove(ctx, c, req.GetSub()); err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.RemoveMemberResponse{}, nil
 }

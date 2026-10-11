@@ -1,18 +1,22 @@
+// Package repository lists the repository modules. SQL lives only under internal/repository, one
+// package per aggregate; the unit of work is internal/db/uow.
 package repository
 
 import (
 	"go.uber.org/fx"
 
-	"github.com/tanjed/bus2/authz/internal/service"
+	"github.com/tanjed/bus2/authz/internal/repository/catalogue"
+	"github.com/tanjed/bus2/authz/internal/repository/company"
+	"github.com/tanjed/bus2/authz/internal/repository/invitation"
+	"github.com/tanjed/bus2/authz/internal/repository/member"
+	"github.com/tanjed/bus2/authz/internal/repository/role"
 )
 
-// Module provides the unit of work and every repository's factory: a service builds the
-// repositories it needs per call, over the pool or the unit of work's transaction.
-var Module = fx.Module("repository", fx.Provide(
-	fx.Annotate(NewUnitOfWork, fx.As(new(service.UnitOfWork))),
-	func() service.CatalogueRepoFactory { return NewCatalogue },
-	func() service.CompanyRepoFactory { return NewCompany },
-	func() service.RoleRepoFactory { return NewRole },
-	func() service.MemberRepoFactory { return NewMember },
-	func() service.InvitationRepoFactory { return NewInvitation },
-))
+// Module is every repository.
+var Module = fx.Options(
+	catalogue.Module,
+	company.Module,
+	role.Module,
+	member.Module,
+	invitation.Module,
+)

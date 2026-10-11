@@ -5,34 +5,34 @@ package internalapi
 
 import (
 	"context"
-	"log/slog"
 
 	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
-	"github.com/tanjed/bus2/authz/internal/router"
-	"github.com/tanjed/bus2/authz/internal/service"
+	catalogsvc "github.com/tanjed/bus2/authz/internal/service/catalogue"
+	"github.com/tanjed/bus2/authz/internal/service/company"
+	"github.com/tanjed/bus2/authz/internal/service/invitation"
 )
 
 // The services InternalService calls, each as narrow as its methods here.
 type (
 	Catalogue interface {
-		ApplyManifest(ctx context.Context, svc string, m catalogue.Manifest) (service.ManifestResult, error)
+		ApplyManifest(ctx context.Context, svc string, m catalogue.Manifest) (catalogsvc.Result, error)
 	}
 	Companies interface {
-		Claims(ctx context.Context, sub string) (service.Claims, error)
+		Claims(ctx context.Context, sub string) (company.Claims, error)
 		Create(ctx context.Context, name, adminSub string) (companyID string, created bool, err error)
 		SetStatus(ctx context.Context, companyID, status string) error
 	}
 	Invitations interface {
-		Get(ctx context.Context, id string) (service.Invitation, error)
+		Get(ctx context.Context, id string) (invitation.Invitation, error)
 		Accept(ctx context.Context, id, sub string) error
 	}
 )
 
 var (
-	_ Catalogue                             = (*service.CatalogueService)(nil)
-	_ Companies                             = (*service.CompanyService)(nil)
-	_ Invitations                           = (*service.InvitationService)(nil)
+	_ Catalogue                             = (*catalogsvc.Service)(nil)
+	_ Companies                             = (*company.Service)(nil)
+	_ Invitations                           = (*invitation.Service)(nil)
 	_ authzv1connect.InternalServiceHandler = (*Internal)(nil)
 )
 
@@ -42,14 +42,4 @@ type Internal struct {
 	Catalogue   Catalogue
 	Companies   Companies
 	Invitations Invitations
-	Log         *slog.Logger
-}
-
-func New(cat *service.CatalogueService, companies *service.CompanyService, invitations *service.InvitationService, log *slog.Logger) *Internal {
-	return &Internal{Catalogue: cat, Companies: companies, Invitations: invitations, Log: log}
-}
-
-// Register serves InternalService on the internal listener only.
-func (s *Internal) Register(r router.Registrar) {
-	r.Internal(authzv1connect.NewInternalServiceHandler(s, r.HandlerOptions()...))
 }

@@ -4,8 +4,7 @@ import (
 	"context"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
-	"github.com/tanjed/bus2/authz/internal/router"
-	"github.com/tanjed/bus2/authz/internal/service"
+	"github.com/tanjed/bus2/authz/internal/service/invitation"
 )
 
 func (a *Admin) ListInvitations(ctx context.Context, _ *authzv1.ListInvitationsRequest) (*authzv1.ListInvitationsResponse, error) {
@@ -15,7 +14,7 @@ func (a *Admin) ListInvitations(ctx context.Context, _ *authzv1.ListInvitationsR
 	}
 	list, err := a.Invitations.List(ctx, c)
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	out := &authzv1.ListInvitationsResponse{}
 	for _, i := range list {
@@ -29,9 +28,9 @@ func (a *Admin) CreateInvitation(ctx context.Context, req *authzv1.CreateInvitat
 	if err != nil {
 		return nil, err
 	}
-	inv, err := a.Invitations.Create(ctx, c, service.InvitationInput{Phone: req.GetPhone(), RoleIDs: req.GetRoleIds()})
+	inv, err := a.Invitations.Create(ctx, c, invitation.Input{Phone: req.GetPhone(), RoleIDs: req.GetRoleIds()})
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	return &authzv1.CreateInvitationResponse{Invitation: InvitationPB(inv)}, nil
 }

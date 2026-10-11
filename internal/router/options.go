@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/tanjed/bus2/authz/internal/apperror"
 )
 
 // JSON uses the proto field names (snake_case), always emits empty fields, and refuses unknown
@@ -45,10 +47,12 @@ func (jsonCodec) Unmarshal(b []byte, v any) error {
 	return jsonUnmarshal.Unmarshal(b, m)
 }
 
-// handlerOptions: panics become Internal (logged) on every protocol, REST included.
+// handlerOptions: the JSON codec, the error interceptor (the one place errors are formatted), and
+// panics become Internal (logged), on every protocol, REST included.
 func handlerOptions(log *slog.Logger) []connect.HandlerOption {
 	return []connect.HandlerOption{
 		connect.WithCodec(jsonCodec{}),
+		connect.WithInterceptors(apperror.Interceptor(log)),
 		connect.WithRecover(func(_ context.Context, spec connect.Spec, _ http.Header, r any) error {
 			log.Error("panic", "procedure", spec.Procedure, "panic", r, "stack", string(debug.Stack()))
 			return connect.NewError(connect.CodeInternal, errors.New("internal error"))

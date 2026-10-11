@@ -48,3 +48,17 @@ func Reset(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 }
+
+// ReadOnly is a pool on the same database whose every transaction is read-only: a stand-in for
+// the read replica, so a write that goes through UnitOfWork.Read fails the test.
+func ReadOnly(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
+	t.Helper()
+	cfg := pool.Config()
+	cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	ro, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(ro.Close)
+	return ro
+}

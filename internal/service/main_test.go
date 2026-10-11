@@ -15,13 +15,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
 
+	"github.com/tanjed/bus2/authz/internal/apperror"
+	"github.com/tanjed/bus2/authz/internal/cache"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
+	"github.com/tanjed/bus2/authz/internal/config"
+	"github.com/tanjed/bus2/authz/internal/db"
+	"github.com/tanjed/bus2/authz/internal/db/uow"
 	"github.com/tanjed/bus2/authz/internal/events"
 	"github.com/tanjed/bus2/authz/internal/idp"
-	"github.com/tanjed/bus2/authz/internal/redisview"
 	"github.com/tanjed/bus2/authz/internal/repository"
 	"github.com/tanjed/bus2/authz/internal/service"
+	"github.com/tanjed/bus2/authz/internal/service/access"
+	catalogsvc "github.com/tanjed/bus2/authz/internal/service/catalogue"
+	"github.com/tanjed/bus2/authz/internal/service/company"
+	"github.com/tanjed/bus2/authz/internal/service/invitation"
+	"github.com/tanjed/bus2/authz/internal/service/member"
+	"github.com/tanjed/bus2/authz/internal/service/resync"
+	"github.com/tanjed/bus2/authz/internal/service/role"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -91,15 +103,15 @@ var (
 )
 
 type env struct {
-	catalogue   *service.CatalogueService
-	companies   *service.CompanyService
-	roles       *service.RoleService
-	members     *service.MemberService
-	invitations *service.InvitationService
-	view        *service.ViewService
+	catalogue   *catalogsvc.Service
+	companies   *company.Service
+	roles       *role.Service
+	members     *member.Service
+	invitations *invitation.Service
+	resync      *resync.Service
 	ev          *fakeEvents
 	idp         *fakeIdP
-	rdb         *redis.Client // the gateway view, read back as the gateway would
+	rdb         *redis.Client // what Authz published, read back as the gateway would
 	ctx         context.Context
 }
 
@@ -110,18 +122,22 @@ func newService(t *testing.T) env {
 	testdb.Reset(t, pool)
 	ev, fi := &fakeEvents{}, &fakeIdP{byPhone: map[string]string{}}
 	rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
-	view := &redisview.Redis{C: rdb}
-	uow := repository.NewUnitOfWork(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	cat, comp, role, mem, inv := repository.NewCatalogue, repository.NewCompany, repository.NewRole, repository.NewMember, repository.NewInvitation
-	return env{
-		catalogue:   service.NewCatalogueService(uow, view, cat, role),
-		companies:   service.NewCompanyService(uow, view, ev, comp, role, mem),
-		roles:       service.NewRoleService(uow, view, ev, role, mem, cat),
-		members:     service.NewMemberService(uow, view, ev, mem, role),
-		invitations: service.NewInvitationService(uow, view, ev, fi, 7*24*time.Hour, inv, mem, role, comp),
-		view:        service.NewViewService(uow, view, cat, role, comp, mem),
-		ev:          ev, idp: fi, rdb: rdb, ctx: ctx,
-	}
+	e := env{ev: ev, idp: fi, rdb: rdb, ctx: ctx}
+	// The real modules, not started: their boot hooks (seed, rebuild) do not run.
+	app := fx.New(fx.NopLogger,
+		uow.Module, repository.Module, service.Module,
+		fx.Supply(db.WritePool{Pool: pool}, db.ReadPool{Pool: testdb.ReadOnly(t, pool)}, slog.New(slog.NewTextHandler(io.Discard, nil)), config.Config{InviteTTL: 7 * 24 * time.Hour}),
+		fx.Provide(
+			func() cache.Publisher {
+				return &cache.Redis{C: rdb, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+			},
+			func() events.Publisher { return ev },
+			func() idp.Client { return fi },
+		),
+		fx.Populate(&e.catalogue, &e.companies, &e.roles, &e.members, &e.invitations, &e.resync),
+	)
+	require.NoError(t, app.Err())
+	return e
 }
 
 // seed loads a small "order" catalogue.
@@ -144,15 +160,15 @@ func (e env) seed(t *testing.T) {
 }
 
 // company creates a company with admin sub "admin-<name>" and returns its id and admin caller.
-func (e env) company(t *testing.T, name string) (string, service.Caller) {
+func (e env) company(t *testing.T, name string) (string, access.Caller) {
 	t.Helper()
 	id, created, err := e.companies.Create(e.ctx, name, "admin-"+name)
 	require.NoError(t, err)
 	require.True(t, created)
-	return id, service.Caller{Sub: "admin-" + name, CompanyID: id}
+	return id, access.Caller{Sub: "admin-" + name, CompanyID: id}
 }
 
-// hash reads a HASH of the gateway view (empty when the key is absent).
+// hash reads a published HASH (empty when the key is absent).
 func (e env) hash(t *testing.T, key string) map[string]string {
 	t.Helper()
 	h, err := e.rdb.HGetAll(e.ctx, key).Result()
@@ -160,10 +176,10 @@ func (e env) hash(t *testing.T, key string) map[string]string {
 	return h
 }
 
-// version reads a member's authorization version from the gateway view; 0 when absent.
+// version reads a member's authorization version as published; 0 when absent.
 func (e env) version(t *testing.T, sub string) int64 {
 	t.Helper()
-	v, err := e.rdb.Get(e.ctx, redisview.UserVersionKey(sub)).Int64()
+	v, err := e.rdb.Get(e.ctx, cache.UserVersionKey(sub)).Int64()
 	if errors.Is(err, redis.Nil) {
 		return 0
 	}
@@ -171,10 +187,10 @@ func (e env) version(t *testing.T, sub string) int64 {
 	return v
 }
 
-func requireStatus(t *testing.T, err error, kind service.Kind, code string) {
+func requireStatus(t *testing.T, err error, kind apperror.Kind, code string) {
 	t.Helper()
 	require.Error(t, err)
-	e, ok := service.AsError(err)
+	e, ok := apperror.As(err)
 	require.True(t, ok, "want domain error, got %v", err)
 	require.Equal(t, kind, e.Kind, e.Message)
 	if code != "" {

@@ -33,10 +33,6 @@ type HTTP struct {
 	HTTP    *http.Client
 }
 
-func New(baseURL string) *HTTP {
-	return &HTTP{BaseURL: baseURL, HTTP: &http.Client{Timeout: 5 * time.Second}}
-}
-
 func (c *HTTP) IdentityByPhone(ctx context.Context, phone string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/api/internal/identities?phone="+url.QueryEscape(phone), nil)
 	if err != nil {

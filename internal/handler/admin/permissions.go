@@ -4,7 +4,6 @@ import (
 	"context"
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
-	"github.com/tanjed/bus2/authz/internal/router"
 )
 
 func (a *Admin) ListPermissions(ctx context.Context, _ *authzv1.ListPermissionsRequest) (*authzv1.ListPermissionsResponse, error) {
@@ -13,7 +12,7 @@ func (a *Admin) ListPermissions(ctx context.Context, _ *authzv1.ListPermissionsR
 	}
 	list, err := a.Permissions.Permissions(ctx)
 	if err != nil {
-		return nil, router.Error(a.Log, err)
+		return nil, err
 	}
 	out := &authzv1.ListPermissionsResponse{}
 	for _, p := range list {

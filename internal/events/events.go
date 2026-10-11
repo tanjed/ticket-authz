@@ -54,14 +54,6 @@ type Kafka struct {
 	log    *slog.Logger
 }
 
-func NewKafka(brokers []string, topic string, log *slog.Logger) (*Kafka, error) {
-	c, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.DefaultProduceTopic(topic), kgo.ProduceRequestTimeout(5*time.Second))
-	if err != nil {
-		return nil, err
-	}
-	return &Kafka{client: c, topic: topic, log: log}, nil
-}
-
 func (k *Kafka) Publish(ctx context.Context, event, companyID string, data map[string]any) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()

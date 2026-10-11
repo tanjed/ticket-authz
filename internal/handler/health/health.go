@@ -1,5 +1,5 @@
-// Package health serves HealthService, the kubelet's liveness and readiness probes, on both
-// listeners.
+// Package health serves HealthService, the kubelet's liveness and readiness probes, on the
+// internal listener.
 package health
 
 import (
@@ -7,12 +7,10 @@ import (
 	"log/slog"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	authzv1connect "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
+	"github.com/tanjed/bus2/authz/internal/apperror"
 	checks "github.com/tanjed/bus2/authz/internal/health"
-	"github.com/tanjed/bus2/authz/internal/router"
 )
 
 var _ authzv1connect.HealthServiceHandler = (*Handler)(nil)
@@ -22,13 +20,6 @@ type Handler struct {
 	authzv1connect.UnimplementedHealthServiceHandler
 	Checker checks.Checker
 	Log     *slog.Logger
-}
-
-func NewHandler(c checks.Checker, log *slog.Logger) *Handler { return &Handler{Checker: c, Log: log} }
-
-// Register serves HealthService on both listeners (GET /live, /ready).
-func (s *Handler) Register(r router.Registrar) {
-	r.Both(authzv1connect.NewHealthServiceHandler(s, r.HandlerOptions()...))
 }
 
 func (s *Handler) Live(context.Context, *authzv1.LiveRequest) (*authzv1.LiveResponse, error) {
@@ -46,8 +37,8 @@ func (s *Handler) Ready(ctx context.Context, _ *authzv1.ReadyRequest) (*authzv1.
 		ok = append(ok, c.Name)
 	}
 	if len(failed) > 0 {
-		// Names only: the public listener answers this too.
-		return nil, router.WithReason(connect.CodeUnavailable, "unhealthy", "unavailable: "+strings.Join(failed, ", "))
+		// Names only: the error details stay in the log.
+		return nil, apperror.Fail(apperror.KindUnavailable, "unhealthy", "unavailable: %s", strings.Join(failed, ", "))
 	}
 	return &authzv1.ReadyResponse{Components: ok}, nil
 }

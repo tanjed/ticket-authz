@@ -6,7 +6,8 @@ replicas: 2
 
 # Names of pre-created Secrets. This chart never creates secrets.
 secrets:
-  # keys: password, url (postgres://authz:<password>@<release>-postgres:5432/authz?sslmode=disable)
+  # keys: password, url (postgres://authz:<password>@<release>-postgres:5432/authz?sslmode=disable),
+  # read_url (optional: a read replica; without it, reads use url)
   postgres: { name: authz-postgres }
   # key: url (redis://[:<password>@]<host>:6379/0): the platform's Redis master (../Infra). Authz
   # writes the gateway view there; the gateway reads a replica.

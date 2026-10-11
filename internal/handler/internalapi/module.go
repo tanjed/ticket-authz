@@ -1,9 +1,28 @@
 package internalapi
 
-import "go.uber.org/fx"
+import (
+	"go.uber.org/fx"
 
-// Module serves InternalService and registers it on the internal listener.
-var Module = fx.Module("internalapi",
-	fx.Provide(New),
-	fx.Invoke((*Internal).Register),
+	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
+	"github.com/tanjed/bus2/authz/internal/router"
+	catalogsvc "github.com/tanjed/bus2/authz/internal/service/catalogue"
+	"github.com/tanjed/bus2/authz/internal/service/company"
+	"github.com/tanjed/bus2/authz/internal/service/invitation"
 )
+
+// Module binds the services to the narrow interfaces InternalService declares, and serves it on
+// the internal listener only.
+var Module = fx.Module("internalapi",
+	fx.Provide(
+		fx.Private,
+		func(s *catalogsvc.Service) Catalogue { return s },
+		func(s *company.Service) Companies { return s },
+		func(s *invitation.Service) Invitations { return s },
+		fx.Annotate(New, fx.As(new(authzv1connect.InternalServiceHandler))),
+	),
+	router.Internal(authzv1connect.NewInternalServiceHandler),
+)
+
+func New(cat Catalogue, companies Companies, invitations Invitations) *Internal {
+	return &Internal{Catalogue: cat, Companies: companies, Invitations: invitations}
+}

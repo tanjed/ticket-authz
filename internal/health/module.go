@@ -6,3 +6,5 @@ import "go.uber.org/fx"
 var Module = fx.Module("health", fx.Provide(
 	fx.Annotate(New, fx.ParamTags(ProbeGroup), fx.As(new(Checker))),
 ))
+
+func New(probes []Probe) *Probes { return &Probes{list: probes} }

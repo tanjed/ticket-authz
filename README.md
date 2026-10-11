@@ -1,6 +1,6 @@
 # Authz
 
-Authorization for the Bus 2.0 platform. It owns the **permission catalogue** (seeded by each service), **company roles** and **who holds which role**, and writes all of it to the **gateway view** in Redis: Authz writes the master, the APISIX gateway (`../APISIX`) reads a replica and decides every request from it. Authz is never on the request path: it is called at login (by the IdP) and when roles change.
+Authorization for the Bus 2.0 platform. It owns the **permission catalogue** (seeded by each service), **company roles** and **who holds which role**, and publishes it to Redis whenever it changes: Authz writes the master, the APISIX gateway (`../APISIX`) reads a replica and decides every request from it. Authz is never on the request path: it is called at login (by the IdP) and when roles change.
 
 ```
 login:    IdP ──(provider client)──► Authz GetClaims ──► JWT { sub, user_type, company_id, roles, authz_version }
@@ -20,7 +20,7 @@ Defined in `proto/bus/authz/v1`. The services are [Connect](https://connectrpc.c
 
 | Listener | Port | Reachable from | Serves |
 |---|---|---|---|
-| public | `:8080` | APISIX only | `AdminService` (roles, members, invitations), `HealthService` |
+| public | `:8080` | APISIX only | `AdminService` (roles, members, invitations) |
 | internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `HealthService` |
 
 `HealthService` is the kubelet's probes: `GET /live` (liveness: the process answers, no dependency checked, so a DB outage never restarts pods) and `GET /ready` (readiness: pings every dependency; 503 / `UNAVAILABLE` naming the failed ones). No gRPC health or server reflection: tools read the schema from `proto/` (`buf curl --schema .`, `grpcurl -import-path proto -proto ...`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
@@ -30,9 +30,9 @@ buf curl --schema . --protocol grpc --http2-prior-knowledge -d '{"sub":"u1"}' ht
 curl localhost:8091/internal/v1/subjects/u1/claims
 ```
 
-## The gateway view (Redis)
+## What Authz publishes to Redis
 
-The key contract the gateway reads, and its decision, are in `docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md`. In short: `authz:routes` (route → permission or `public`), `authz:consumer`, `authz:company:<id>` (status), `authz:company:<id>:role:<id>` (permissions, `*` for the admin role), `authz:user:<sub>:version`. A provider token whose `authz_version` differs from the view is refused (`401 token_stale`): the client refreshes it. Role permission edits and suspensions apply at once without a refresh. Each write updates its keys after commit; every boot rebuilds the whole view.
+The key contract the gateway reads, and its decision, are in `docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md`. In short: `authz:routes` (route → permission or `public`), `authz:consumer`, `authz:company:<id>` (status), `authz:company:<id>:role:<id>` (permissions, `*` for the admin role), `authz:user:<sub>:version`. A provider token whose `authz_version` differs from the published one is refused (`401 token_stale`): the client refreshes it. Role permission edits and suspensions apply at once without a refresh. Each change publishes its keys after commit, best effort; every boot resyncs the whole state (and deletes keys of what no longer exists).
 
 ## Seeding a service
 
@@ -51,7 +51,7 @@ Needs Go, Docker and `make`. Runs on the `shohoz` network with `../Infra` (Redis
 
 ```sh
 make tools generate   # pinned buf + plugins into ./bin, regenerate api/ (only after editing proto/)
-make test             # Go tests; the service and server tests start a Postgres container (Redis: miniredis)
+make test             # Go tests; the service and router tests start a Postgres container (Redis: miniredis)
 (cd ../Infra && docker compose up -d)
 docker compose up -d --build
 ```
@@ -62,10 +62,11 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 
 | Variable | Meaning |
 |---|---|
-| `AUTHZ_DATABASE_URL` | Postgres (required) |
+| `AUTHZ_DATABASE_URL` | Postgres primary: writes and migrations (required) |
+| `AUTHZ_DATABASE_READ_URL` | Postgres read replica for reads outside a write (defaults to `AUTHZ_DATABASE_URL`; lag accepted) |
 | `AUTHZ_PUBLIC_ADDR` | Public listener (`:8080`) |
 | `AUTHZ_INTERNAL_ADDR` | Internal listener (`:8081`) |
-| `AUTHZ_REDIS_URL` | The Redis master the gateway view is written to (required) |
+| `AUTHZ_REDIS_URL` | The Redis master Authz publishes to (required) |
 | `AUTHZ_IDP_INTERNAL_URL` | The IdP UI's cluster-internal URL (invitations; required for `serve`) |
 | `AUTHZ_KAFKA_BROKERS`, `AUTHZ_KAFKA_TOPIC` | Events (`authz.events`); no brokers: events are only logged |
 | `AUTHZ_INVITE_TTL` | Invitation lifetime (`168h`) |
@@ -74,17 +75,18 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 
 | Path | Contents |
 |---|---|
-| `cmd/authz` | Entry point: migrations, own manifest, gateway view rebuild, then serve |
+| `cmd/authz` | Entry point: migrations, own manifest, Redis resync, then serve |
 | `proto/`, `api/` | API definitions; generated Go (messages, Connect handlers and clients) and OpenAPI (committed) |
 | `internal/ioc` | Assembles the app from each package's `fx.Module` (`module.go`) |
 | `internal/handler/admin` | AdminService handler (public listener) |
 | `internal/handler/internalapi` | InternalService handler (internal listener) |
-| `internal/handler/health` | HealthService handler (both listeners) |
-| `internal/service` | business rules, domain types, ports (repository interfaces, unit of work, gateway view) |
-| `internal/repository` | SQL: the unit of work and one repository per aggregate |
-| `internal/router` | services per listener, Vanguard transcoders, chi routers, Connect options, error mapping |
-| `internal/server` | the two listeners |
-| `internal/redisview` | the gateway view in Redis (the key contract) |
+| `internal/handler/health` | HealthService handler (internal listener) |
+| `internal/apperror` | every error artifact: application errors, repository sentinels, Postgres mapping, the Connect interceptor, REST error bodies |
+| `internal/db/uow` | the unit of work: carries the transaction (or the read replica) in the context |
+| `internal/service/*` | business rules, one package + fx module per service (`access`: the escalation rule) |
+| `internal/repository/*` | SQL, one package + fx module per aggregate; each owns its row types and its `Repo` interface |
+| `internal/router` | the two listeners: services per listener (fx group), Vanguard transcoders, chi routers, Connect options, the error interceptor |
+| `internal/cache` | publishes the authorization state to Redis (`Publisher`; the key contract with `../APISIX`) |
 | `internal/health` | readiness probes (each dependency's package contributes one) |
 | `manifest/` | Authz's own manifest (its admin API routes), seeded at startup |
 | `migrations/` | goose SQL |

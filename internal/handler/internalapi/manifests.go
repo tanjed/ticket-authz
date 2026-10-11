@@ -5,7 +5,6 @@ import (
 
 	authzv1 "github.com/tanjed/bus2/authz/api/gen/bus/authz/v1"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
-	"github.com/tanjed/bus2/authz/internal/router"
 )
 
 func (s *Internal) ApplyManifest(ctx context.Context, req *authzv1.ApplyManifestRequest) (*authzv1.ApplyManifestResponse, error) {
@@ -18,7 +17,7 @@ func (s *Internal) ApplyManifest(ctx context.Context, req *authzv1.ApplyManifest
 	}
 	res, err := s.Catalogue.ApplyManifest(ctx, req.GetService(), m)
 	if err != nil {
-		return nil, router.Error(s.Log, err)
+		return nil, err
 	}
 	return &authzv1.ApplyManifestResponse{
 		Service: res.Service, Permissions: int32(res.Permissions), Routes: int32(res.Routes), Changed: res.Changed,

@@ -23,6 +23,9 @@ spec:
           env:
             - name: AUTHZ_DATABASE_URL
               valueFrom: { secretKeyRef: { name: {{ .Values.secrets.postgres.name }}, key: url } }
+            # Optional read replica; without the key, reads use the primary.
+            - name: AUTHZ_DATABASE_READ_URL
+              valueFrom: { secretKeyRef: { name: {{ .Values.secrets.postgres.name }}, key: read_url, optional: true } }
             - name: AUTHZ_REDIS_URL
               valueFrom: { secretKeyRef: { name: {{ .Values.secrets.redis.name }}, key: url } }
             - { name: AUTHZ_IDP_INTERNAL_URL, value: {{ .Values.idpInternalUrl | quote }} }

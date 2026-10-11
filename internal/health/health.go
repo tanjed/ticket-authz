@@ -37,8 +37,6 @@ type Probes struct {
 	list []Probe
 }
 
-func New(probes []Probe) *Probes { return &Probes{list: probes} }
-
 func (p *Probes) Check(ctx context.Context) []Component {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
