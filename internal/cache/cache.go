@@ -8,8 +8,9 @@ import "context"
 
 // Route values besides a permission key, and the permission a grants_all role holds.
 const (
-	RoutePublic   = "public"
-	AllPermission = "*"
+	RoutePublic        = "public"
+	RouteAuthenticated = "authenticated"
+	AllPermission      = "*"
 )
 
 // Publisher writes the state to Redis. Each Put replaces its key whole. Publishing is best effort:

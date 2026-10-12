@@ -39,18 +39,24 @@ const (
 	// InternalServiceGetClaimsProcedure is the fully-qualified name of the InternalService's GetClaims
 	// RPC.
 	InternalServiceGetClaimsProcedure = "/bus.authz.v1.InternalService/GetClaims"
-	// InternalServiceCreateCompanyProcedure is the fully-qualified name of the InternalService's
-	// CreateCompany RPC.
-	InternalServiceCreateCompanyProcedure = "/bus.authz.v1.InternalService/CreateCompany"
 	// InternalServiceSetCompanyStatusProcedure is the fully-qualified name of the InternalService's
 	// SetCompanyStatus RPC.
 	InternalServiceSetCompanyStatusProcedure = "/bus.authz.v1.InternalService/SetCompanyStatus"
-	// InternalServiceGetInvitationProcedure is the fully-qualified name of the InternalService's
-	// GetInvitation RPC.
-	InternalServiceGetInvitationProcedure = "/bus.authz.v1.InternalService/GetInvitation"
-	// InternalServiceAcceptInvitationProcedure is the fully-qualified name of the InternalService's
-	// AcceptInvitation RPC.
-	InternalServiceAcceptInvitationProcedure = "/bus.authz.v1.InternalService/AcceptInvitation"
+	// InternalServiceCreateAdminRoleProcedure is the fully-qualified name of the InternalService's
+	// CreateAdminRole RPC.
+	InternalServiceCreateAdminRoleProcedure = "/bus.authz.v1.InternalService/CreateAdminRole"
+	// InternalServiceAssignRolesProcedure is the fully-qualified name of the InternalService's
+	// AssignRoles RPC.
+	InternalServiceAssignRolesProcedure = "/bus.authz.v1.InternalService/AssignRoles"
+	// InternalServiceCheckAssignableProcedure is the fully-qualified name of the InternalService's
+	// CheckAssignable RPC.
+	InternalServiceCheckAssignableProcedure = "/bus.authz.v1.InternalService/CheckAssignable"
+	// InternalServiceCanRemoveUserProcedure is the fully-qualified name of the InternalService's
+	// CanRemoveUser RPC.
+	InternalServiceCanRemoveUserProcedure = "/bus.authz.v1.InternalService/CanRemoveUser"
+	// InternalServiceRevokeUserProcedure is the fully-qualified name of the InternalService's
+	// RevokeUser RPC.
+	InternalServiceRevokeUserProcedure = "/bus.authz.v1.InternalService/RevokeUser"
 )
 
 // InternalServiceClient is a client for the bus.authz.v1.InternalService service.
@@ -58,18 +64,28 @@ type InternalServiceClient interface {
 	// Replaces a service's permissions and APISIX route map. Entries it no longer lists are
 	// deprecated (denied by the gateway), never deleted; listing them again restores them.
 	ApplyManifest(context.Context, *v1.ApplyManifestRequest) (*v1.ApplyManifestResponse, error)
-	// A provider's company and roles, for the access token. NOT_FOUND: in no company.
-	// PERMISSION_DENIED: the company is suspended.
+	// A provider's company and roles, for the access token. The membership and company status come
+	// from Company. NOT_FOUND: in no company. PERMISSION_DENIED: the company is not active
+	// (suspended or pending_setup). UNAVAILABLE: Company cannot be reached.
 	GetClaims(context.Context, *v1.GetClaimsRequest) (*v1.GetClaimsResponse, error)
-	// Registers a company with its protected admin role held by admin_sub. Idempotent per subject:
-	// if admin_sub already belongs to a company, that company is returned (created = false).
-	CreateCompany(context.Context, *v1.CreateCompanyRequest) (*v1.CreateCompanyResponse, error)
+	// Publishes the company status (the status itself is Company's) to the gateway view (Redis).
 	SetCompanyStatus(context.Context, *v1.SetCompanyStatusRequest) (*v1.SetCompanyStatusResponse, error)
-	// For the IdP's invite page.
-	GetInvitation(context.Context, *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error)
-	// Makes sub a member with the invited roles. ALREADY_EXISTS: used already, or sub belongs to a
-	// company. FAILED_PRECONDITION: expired.
-	AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error)
+	// Creates the company's protected Admin role if it has none, makes user_id hold it, and
+	// publishes company active, role `*` and the user's version. Idempotent: an existing protected
+	// role is reused and the holding ensured. Called by Company on company creation.
+	CreateAdminRole(context.Context, *v1.CreateAdminRoleRequest) (*v1.CreateAdminRoleResponse, error)
+	// Adds these roles of the company to what the user holds (idempotent); role ids that no longer
+	// exist are skipped. A new version is published. Called by Company on invitation accept.
+	AssignRoles(context.Context, *v1.AssignRolesRequest) (*v1.AssignRolesResponse, error)
+	// The escalation rule for an invitation: every role must belong to the company and the caller's
+	// own permissions (read fresh) must cover them. PERMISSION_DENIED (escalation) or NOT_FOUND.
+	CheckAssignable(context.Context, *v1.CheckAssignableRequest) (*v1.CheckAssignableResponse, error)
+	// removable = false with reason "last_admin" when the user is the only holder of the protected
+	// Admin role.
+	CanRemoveUser(context.Context, *v1.CanRemoveUserRequest) (*v1.CanRemoveUserResponse, error)
+	// Deletes the user's role assignments and bumps their version, so their token is stale at once.
+	// Idempotent.
+	RevokeUser(context.Context, *v1.RevokeUserRequest) (*v1.RevokeUserResponse, error)
 }
 
 // NewInternalServiceClient constructs a client for the bus.authz.v1.InternalService service. By
@@ -95,28 +111,40 @@ func NewInternalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(internalServiceMethods.ByName("GetClaims")),
 			connect.WithClientOptions(opts...),
 		),
-		createCompany: connect.NewClient[v1.CreateCompanyRequest, v1.CreateCompanyResponse](
-			httpClient,
-			baseURL+InternalServiceCreateCompanyProcedure,
-			connect.WithSchema(internalServiceMethods.ByName("CreateCompany")),
-			connect.WithClientOptions(opts...),
-		),
 		setCompanyStatus: connect.NewClient[v1.SetCompanyStatusRequest, v1.SetCompanyStatusResponse](
 			httpClient,
 			baseURL+InternalServiceSetCompanyStatusProcedure,
 			connect.WithSchema(internalServiceMethods.ByName("SetCompanyStatus")),
 			connect.WithClientOptions(opts...),
 		),
-		getInvitation: connect.NewClient[v1.GetInvitationRequest, v1.GetInvitationResponse](
+		createAdminRole: connect.NewClient[v1.CreateAdminRoleRequest, v1.CreateAdminRoleResponse](
 			httpClient,
-			baseURL+InternalServiceGetInvitationProcedure,
-			connect.WithSchema(internalServiceMethods.ByName("GetInvitation")),
+			baseURL+InternalServiceCreateAdminRoleProcedure,
+			connect.WithSchema(internalServiceMethods.ByName("CreateAdminRole")),
 			connect.WithClientOptions(opts...),
 		),
-		acceptInvitation: connect.NewClient[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse](
+		assignRoles: connect.NewClient[v1.AssignRolesRequest, v1.AssignRolesResponse](
 			httpClient,
-			baseURL+InternalServiceAcceptInvitationProcedure,
-			connect.WithSchema(internalServiceMethods.ByName("AcceptInvitation")),
+			baseURL+InternalServiceAssignRolesProcedure,
+			connect.WithSchema(internalServiceMethods.ByName("AssignRoles")),
+			connect.WithClientOptions(opts...),
+		),
+		checkAssignable: connect.NewClient[v1.CheckAssignableRequest, v1.CheckAssignableResponse](
+			httpClient,
+			baseURL+InternalServiceCheckAssignableProcedure,
+			connect.WithSchema(internalServiceMethods.ByName("CheckAssignable")),
+			connect.WithClientOptions(opts...),
+		),
+		canRemoveUser: connect.NewClient[v1.CanRemoveUserRequest, v1.CanRemoveUserResponse](
+			httpClient,
+			baseURL+InternalServiceCanRemoveUserProcedure,
+			connect.WithSchema(internalServiceMethods.ByName("CanRemoveUser")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeUser: connect.NewClient[v1.RevokeUserRequest, v1.RevokeUserResponse](
+			httpClient,
+			baseURL+InternalServiceRevokeUserProcedure,
+			connect.WithSchema(internalServiceMethods.ByName("RevokeUser")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -126,10 +154,12 @@ func NewInternalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 type internalServiceClient struct {
 	applyManifest    *connect.Client[v1.ApplyManifestRequest, v1.ApplyManifestResponse]
 	getClaims        *connect.Client[v1.GetClaimsRequest, v1.GetClaimsResponse]
-	createCompany    *connect.Client[v1.CreateCompanyRequest, v1.CreateCompanyResponse]
 	setCompanyStatus *connect.Client[v1.SetCompanyStatusRequest, v1.SetCompanyStatusResponse]
-	getInvitation    *connect.Client[v1.GetInvitationRequest, v1.GetInvitationResponse]
-	acceptInvitation *connect.Client[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse]
+	createAdminRole  *connect.Client[v1.CreateAdminRoleRequest, v1.CreateAdminRoleResponse]
+	assignRoles      *connect.Client[v1.AssignRolesRequest, v1.AssignRolesResponse]
+	checkAssignable  *connect.Client[v1.CheckAssignableRequest, v1.CheckAssignableResponse]
+	canRemoveUser    *connect.Client[v1.CanRemoveUserRequest, v1.CanRemoveUserResponse]
+	revokeUser       *connect.Client[v1.RevokeUserRequest, v1.RevokeUserResponse]
 }
 
 // ApplyManifest calls bus.authz.v1.InternalService.ApplyManifest.
@@ -150,15 +180,6 @@ func (c *internalServiceClient) GetClaims(ctx context.Context, req *v1.GetClaims
 	return nil, err
 }
 
-// CreateCompany calls bus.authz.v1.InternalService.CreateCompany.
-func (c *internalServiceClient) CreateCompany(ctx context.Context, req *v1.CreateCompanyRequest) (*v1.CreateCompanyResponse, error) {
-	response, err := c.createCompany.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
 // SetCompanyStatus calls bus.authz.v1.InternalService.SetCompanyStatus.
 func (c *internalServiceClient) SetCompanyStatus(ctx context.Context, req *v1.SetCompanyStatusRequest) (*v1.SetCompanyStatusResponse, error) {
 	response, err := c.setCompanyStatus.CallUnary(ctx, connect.NewRequest(req))
@@ -168,18 +189,45 @@ func (c *internalServiceClient) SetCompanyStatus(ctx context.Context, req *v1.Se
 	return nil, err
 }
 
-// GetInvitation calls bus.authz.v1.InternalService.GetInvitation.
-func (c *internalServiceClient) GetInvitation(ctx context.Context, req *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error) {
-	response, err := c.getInvitation.CallUnary(ctx, connect.NewRequest(req))
+// CreateAdminRole calls bus.authz.v1.InternalService.CreateAdminRole.
+func (c *internalServiceClient) CreateAdminRole(ctx context.Context, req *v1.CreateAdminRoleRequest) (*v1.CreateAdminRoleResponse, error) {
+	response, err := c.createAdminRole.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// AcceptInvitation calls bus.authz.v1.InternalService.AcceptInvitation.
-func (c *internalServiceClient) AcceptInvitation(ctx context.Context, req *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error) {
-	response, err := c.acceptInvitation.CallUnary(ctx, connect.NewRequest(req))
+// AssignRoles calls bus.authz.v1.InternalService.AssignRoles.
+func (c *internalServiceClient) AssignRoles(ctx context.Context, req *v1.AssignRolesRequest) (*v1.AssignRolesResponse, error) {
+	response, err := c.assignRoles.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// CheckAssignable calls bus.authz.v1.InternalService.CheckAssignable.
+func (c *internalServiceClient) CheckAssignable(ctx context.Context, req *v1.CheckAssignableRequest) (*v1.CheckAssignableResponse, error) {
+	response, err := c.checkAssignable.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// CanRemoveUser calls bus.authz.v1.InternalService.CanRemoveUser.
+func (c *internalServiceClient) CanRemoveUser(ctx context.Context, req *v1.CanRemoveUserRequest) (*v1.CanRemoveUserResponse, error) {
+	response, err := c.canRemoveUser.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// RevokeUser calls bus.authz.v1.InternalService.RevokeUser.
+func (c *internalServiceClient) RevokeUser(ctx context.Context, req *v1.RevokeUserRequest) (*v1.RevokeUserResponse, error) {
+	response, err := c.revokeUser.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -191,18 +239,28 @@ type InternalServiceHandler interface {
 	// Replaces a service's permissions and APISIX route map. Entries it no longer lists are
 	// deprecated (denied by the gateway), never deleted; listing them again restores them.
 	ApplyManifest(context.Context, *v1.ApplyManifestRequest) (*v1.ApplyManifestResponse, error)
-	// A provider's company and roles, for the access token. NOT_FOUND: in no company.
-	// PERMISSION_DENIED: the company is suspended.
+	// A provider's company and roles, for the access token. The membership and company status come
+	// from Company. NOT_FOUND: in no company. PERMISSION_DENIED: the company is not active
+	// (suspended or pending_setup). UNAVAILABLE: Company cannot be reached.
 	GetClaims(context.Context, *v1.GetClaimsRequest) (*v1.GetClaimsResponse, error)
-	// Registers a company with its protected admin role held by admin_sub. Idempotent per subject:
-	// if admin_sub already belongs to a company, that company is returned (created = false).
-	CreateCompany(context.Context, *v1.CreateCompanyRequest) (*v1.CreateCompanyResponse, error)
+	// Publishes the company status (the status itself is Company's) to the gateway view (Redis).
 	SetCompanyStatus(context.Context, *v1.SetCompanyStatusRequest) (*v1.SetCompanyStatusResponse, error)
-	// For the IdP's invite page.
-	GetInvitation(context.Context, *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error)
-	// Makes sub a member with the invited roles. ALREADY_EXISTS: used already, or sub belongs to a
-	// company. FAILED_PRECONDITION: expired.
-	AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error)
+	// Creates the company's protected Admin role if it has none, makes user_id hold it, and
+	// publishes company active, role `*` and the user's version. Idempotent: an existing protected
+	// role is reused and the holding ensured. Called by Company on company creation.
+	CreateAdminRole(context.Context, *v1.CreateAdminRoleRequest) (*v1.CreateAdminRoleResponse, error)
+	// Adds these roles of the company to what the user holds (idempotent); role ids that no longer
+	// exist are skipped. A new version is published. Called by Company on invitation accept.
+	AssignRoles(context.Context, *v1.AssignRolesRequest) (*v1.AssignRolesResponse, error)
+	// The escalation rule for an invitation: every role must belong to the company and the caller's
+	// own permissions (read fresh) must cover them. PERMISSION_DENIED (escalation) or NOT_FOUND.
+	CheckAssignable(context.Context, *v1.CheckAssignableRequest) (*v1.CheckAssignableResponse, error)
+	// removable = false with reason "last_admin" when the user is the only holder of the protected
+	// Admin role.
+	CanRemoveUser(context.Context, *v1.CanRemoveUserRequest) (*v1.CanRemoveUserResponse, error)
+	// Deletes the user's role assignments and bumps their version, so their token is stale at once.
+	// Idempotent.
+	RevokeUser(context.Context, *v1.RevokeUserRequest) (*v1.RevokeUserResponse, error)
 }
 
 // NewInternalServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -224,28 +282,40 @@ func NewInternalServiceHandler(svc InternalServiceHandler, opts ...connect.Handl
 		connect.WithSchema(internalServiceMethods.ByName("GetClaims")),
 		connect.WithHandlerOptions(opts...),
 	)
-	internalServiceCreateCompanyHandler := connect.NewUnaryHandlerSimple(
-		InternalServiceCreateCompanyProcedure,
-		svc.CreateCompany,
-		connect.WithSchema(internalServiceMethods.ByName("CreateCompany")),
-		connect.WithHandlerOptions(opts...),
-	)
 	internalServiceSetCompanyStatusHandler := connect.NewUnaryHandlerSimple(
 		InternalServiceSetCompanyStatusProcedure,
 		svc.SetCompanyStatus,
 		connect.WithSchema(internalServiceMethods.ByName("SetCompanyStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
-	internalServiceGetInvitationHandler := connect.NewUnaryHandlerSimple(
-		InternalServiceGetInvitationProcedure,
-		svc.GetInvitation,
-		connect.WithSchema(internalServiceMethods.ByName("GetInvitation")),
+	internalServiceCreateAdminRoleHandler := connect.NewUnaryHandlerSimple(
+		InternalServiceCreateAdminRoleProcedure,
+		svc.CreateAdminRole,
+		connect.WithSchema(internalServiceMethods.ByName("CreateAdminRole")),
 		connect.WithHandlerOptions(opts...),
 	)
-	internalServiceAcceptInvitationHandler := connect.NewUnaryHandlerSimple(
-		InternalServiceAcceptInvitationProcedure,
-		svc.AcceptInvitation,
-		connect.WithSchema(internalServiceMethods.ByName("AcceptInvitation")),
+	internalServiceAssignRolesHandler := connect.NewUnaryHandlerSimple(
+		InternalServiceAssignRolesProcedure,
+		svc.AssignRoles,
+		connect.WithSchema(internalServiceMethods.ByName("AssignRoles")),
+		connect.WithHandlerOptions(opts...),
+	)
+	internalServiceCheckAssignableHandler := connect.NewUnaryHandlerSimple(
+		InternalServiceCheckAssignableProcedure,
+		svc.CheckAssignable,
+		connect.WithSchema(internalServiceMethods.ByName("CheckAssignable")),
+		connect.WithHandlerOptions(opts...),
+	)
+	internalServiceCanRemoveUserHandler := connect.NewUnaryHandlerSimple(
+		InternalServiceCanRemoveUserProcedure,
+		svc.CanRemoveUser,
+		connect.WithSchema(internalServiceMethods.ByName("CanRemoveUser")),
+		connect.WithHandlerOptions(opts...),
+	)
+	internalServiceRevokeUserHandler := connect.NewUnaryHandlerSimple(
+		InternalServiceRevokeUserProcedure,
+		svc.RevokeUser,
+		connect.WithSchema(internalServiceMethods.ByName("RevokeUser")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/bus.authz.v1.InternalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -254,14 +324,18 @@ func NewInternalServiceHandler(svc InternalServiceHandler, opts ...connect.Handl
 			internalServiceApplyManifestHandler.ServeHTTP(w, r)
 		case InternalServiceGetClaimsProcedure:
 			internalServiceGetClaimsHandler.ServeHTTP(w, r)
-		case InternalServiceCreateCompanyProcedure:
-			internalServiceCreateCompanyHandler.ServeHTTP(w, r)
 		case InternalServiceSetCompanyStatusProcedure:
 			internalServiceSetCompanyStatusHandler.ServeHTTP(w, r)
-		case InternalServiceGetInvitationProcedure:
-			internalServiceGetInvitationHandler.ServeHTTP(w, r)
-		case InternalServiceAcceptInvitationProcedure:
-			internalServiceAcceptInvitationHandler.ServeHTTP(w, r)
+		case InternalServiceCreateAdminRoleProcedure:
+			internalServiceCreateAdminRoleHandler.ServeHTTP(w, r)
+		case InternalServiceAssignRolesProcedure:
+			internalServiceAssignRolesHandler.ServeHTTP(w, r)
+		case InternalServiceCheckAssignableProcedure:
+			internalServiceCheckAssignableHandler.ServeHTTP(w, r)
+		case InternalServiceCanRemoveUserProcedure:
+			internalServiceCanRemoveUserHandler.ServeHTTP(w, r)
+		case InternalServiceRevokeUserProcedure:
+			internalServiceRevokeUserHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -279,18 +353,26 @@ func (UnimplementedInternalServiceHandler) GetClaims(context.Context, *v1.GetCla
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.GetClaims is not implemented"))
 }
 
-func (UnimplementedInternalServiceHandler) CreateCompany(context.Context, *v1.CreateCompanyRequest) (*v1.CreateCompanyResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.CreateCompany is not implemented"))
-}
-
 func (UnimplementedInternalServiceHandler) SetCompanyStatus(context.Context, *v1.SetCompanyStatusRequest) (*v1.SetCompanyStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.SetCompanyStatus is not implemented"))
 }
 
-func (UnimplementedInternalServiceHandler) GetInvitation(context.Context, *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.GetInvitation is not implemented"))
+func (UnimplementedInternalServiceHandler) CreateAdminRole(context.Context, *v1.CreateAdminRoleRequest) (*v1.CreateAdminRoleResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.CreateAdminRole is not implemented"))
 }
 
-func (UnimplementedInternalServiceHandler) AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.AcceptInvitation is not implemented"))
+func (UnimplementedInternalServiceHandler) AssignRoles(context.Context, *v1.AssignRolesRequest) (*v1.AssignRolesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.AssignRoles is not implemented"))
+}
+
+func (UnimplementedInternalServiceHandler) CheckAssignable(context.Context, *v1.CheckAssignableRequest) (*v1.CheckAssignableResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.CheckAssignable is not implemented"))
+}
+
+func (UnimplementedInternalServiceHandler) CanRemoveUser(context.Context, *v1.CanRemoveUserRequest) (*v1.CanRemoveUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.CanRemoveUser is not implemented"))
+}
+
+func (UnimplementedInternalServiceHandler) RevokeUser(context.Context, *v1.RevokeUserRequest) (*v1.RevokeUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.InternalService.RevokeUser is not implemented"))
 }

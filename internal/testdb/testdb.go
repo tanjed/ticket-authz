@@ -43,7 +43,7 @@ func Start(ctx context.Context) (*pgxpool.Pool, func(), error) {
 func Reset(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `
-		TRUNCATE invitations, member_roles, members, role_permissions, roles, companies, routes, permissions CASCADE;`)
+		TRUNCATE user_roles, user_versions, role_permissions, roles, routes, permissions CASCADE;`)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,10 +23,16 @@ type Repo interface {
 	Create(ctx context.Context, companyID string, r Role) error
 	// Rename renames a role and bumps its version; ErrDuplicate if the name is taken.
 	Rename(ctx context.Context, id, name string) error
+	// SetLandingPath changes only the landing path: no version bump (it is not in the gateway view).
+	SetLandingPath(ctx context.Context, id, path string) error
 	// SetPermissions replaces a role's permissions.
 	SetPermissions(ctx context.Context, id string, keys []string) error
 	Delete(ctx context.Context, id string) error
-	// Assigned reports whether any member holds the role.
+	// Protected loads the company's protected (Admin) role; ErrNotFound if it has none.
+	Protected(ctx context.Context, companyID string) (Role, error)
+	// LockCompany serializes the creation of a company's protected role until the transaction ends.
+	LockCompany(ctx context.Context, companyID string) error
+	// Assigned reports whether any user holds the role.
 	Assigned(ctx context.Context, id string) (bool, error)
 	// View is the gateway view of the given roles, or of every role when ids is empty.
 	View(ctx context.Context, ids ...string) ([]cache.RoleView, error)
@@ -43,6 +49,7 @@ type Role struct {
 	Permissions []string  `json:"permissions"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	LandingPath string    `json:"landing_path"`
 }
 
 // Repository is the roles and role_permissions tables.
@@ -52,7 +59,7 @@ type Repository struct{ db uow.Querier }
 const roleSelect = `
 	SELECT r.id::text, r.name, r.protected, r.grants_all, r.version,
 	       coalesce(array_agg(rp.permission_key ORDER BY rp.permission_key) FILTER (WHERE rp.permission_key IS NOT NULL), '{}'),
-	       r.created_at, r.updated_at
+	       r.created_at, r.updated_at, r.landing_path
 	FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id`
 
 func (r *Repository) List(ctx context.Context, companyID string) ([]Role, error) {
@@ -89,14 +96,19 @@ func (r *Repository) Lock(ctx context.Context, companyID, id string) (Role, erro
 }
 
 func (r *Repository) Create(ctx context.Context, companyID string, role Role) error {
-	_, err := r.db.Q(ctx).Exec(ctx, `INSERT INTO roles (id, company_id, name, protected, grants_all) VALUES ($1, $2, $3, $4, $5)`,
-		role.ID, companyID, role.Name, role.Protected, role.GrantsAll)
+	_, err := r.db.Q(ctx).Exec(ctx, `INSERT INTO roles (id, company_id, name, protected, grants_all, landing_path) VALUES ($1, $2, $3, $4, $5, $6)`,
+		role.ID, companyID, role.Name, role.Protected, role.GrantsAll, role.LandingPath)
 	return apperror.FromPG(err)
 }
 
 func (r *Repository) Rename(ctx context.Context, id, name string) error {
 	_, err := r.db.Q(ctx).Exec(ctx, `UPDATE roles SET name = $2, version = version + 1, updated_at = now() WHERE id = $1`, id, name)
 	return apperror.FromPG(err)
+}
+
+func (r *Repository) SetLandingPath(ctx context.Context, id, path string) error {
+	_, err := r.db.Q(ctx).Exec(ctx, `UPDATE roles SET landing_path = $2, updated_at = now() WHERE id = $1`, id, path)
+	return err
 }
 
 func (r *Repository) SetPermissions(ctx context.Context, id string, keys []string) error {
@@ -112,9 +124,23 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 	return err
 }
 
+func (r *Repository) Protected(ctx context.Context, companyID string) (Role, error) {
+	rows, err := r.db.Q(ctx).Query(ctx, roleSelect+` WHERE r.company_id = $1 AND r.protected GROUP BY r.id ORDER BY r.created_at LIMIT 1`, companyID)
+	if err != nil {
+		return Role{}, err
+	}
+	role, err := pgx.CollectOneRow(rows, pgx.RowToStructByPos[Role])
+	return role, apperror.FromPG(err)
+}
+
+func (r *Repository) LockCompany(ctx context.Context, companyID string) error {
+	_, err := r.db.Q(ctx).Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('authz:admin-role:' || $1::text))`, companyID)
+	return err
+}
+
 func (r *Repository) Assigned(ctx context.Context, id string) (bool, error) {
 	var inUse bool
-	err := r.db.Q(ctx).QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM member_roles WHERE role_id = $1)`, id).Scan(&inUse)
+	err := r.db.Q(ctx).QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM user_roles WHERE role_id = $1)`, id).Scan(&inUse)
 	return inUse, err
 }
 

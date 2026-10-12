@@ -7,7 +7,7 @@ import (
 	"github.com/tanjed/bus2/authz/internal/router"
 	catalogsvc "github.com/tanjed/bus2/authz/internal/service/catalogue"
 	"github.com/tanjed/bus2/authz/internal/service/company"
-	"github.com/tanjed/bus2/authz/internal/service/invitation"
+	"github.com/tanjed/bus2/authz/internal/service/user"
 )
 
 // Module binds the services to the narrow interfaces InternalService declares, and serves it on
@@ -17,12 +17,12 @@ var Module = fx.Module("internalapi",
 		fx.Private,
 		func(s *catalogsvc.Service) Catalogue { return s },
 		func(s *company.Service) Companies { return s },
-		func(s *invitation.Service) Invitations { return s },
+		func(s *user.Service) Users { return s },
 		fx.Annotate(New, fx.As(new(authzv1connect.InternalServiceHandler))),
 	),
 	router.Internal(authzv1connect.NewInternalServiceHandler),
 )
 
-func New(cat Catalogue, companies Companies, invitations Invitations) *Internal {
-	return &Internal{Catalogue: cat, Companies: companies, Invitations: invitations}
+func New(cat Catalogue, companies Companies, users Users) *Internal {
+	return &Internal{Catalogue: cat, Companies: companies, Users: users}
 }

@@ -1,5 +1,5 @@
 // Package access is the escalation rule and the caller's power behind it, shared by the services
-// that hand out roles (role, member, invitation).
+// that hand out roles (role, user).
 package access
 
 import (
@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tanjed/bus2/authz/internal/apperror"
-	memberrepo "github.com/tanjed/bus2/authz/internal/repository/member"
 	rolerepo "github.com/tanjed/bus2/authz/internal/repository/role"
+	userrepo "github.com/tanjed/bus2/authz/internal/repository/userrole"
 )
 
 // Power is what a caller may hand out: everything (grants_all) or a set of permissions.
@@ -46,19 +46,19 @@ func (p Power) CoversAll(roles map[string]rolerepo.Role) bool {
 }
 
 // CallerPower reads the caller's effective permissions fresh from the database (never from the
-// token) and confirms they still belong to the company the gateway named.
-func CallerPower(ctx context.Context, members memberrepo.Repo, c Caller) (Power, error) {
-	if c.Sub == "" || uuid.Validate(c.CompanyID) != nil {
+// token) and confirms they still hold roles in the company the gateway named.
+func CallerPower(ctx context.Context, users userrepo.Repo, c Caller) (Power, error) {
+	if c.UserID == "" || uuid.Validate(c.CompanyID) != nil {
 		return Power{}, notAMember()
 	}
-	ok, err := members.IsMember(ctx, c.Sub, c.CompanyID)
+	ok, err := users.IsMember(ctx, c.UserID, c.CompanyID)
 	if err != nil {
 		return Power{}, err
 	}
 	if !ok {
 		return Power{}, notAMember()
 	}
-	all, keys, err := members.Grants(ctx, c.Sub)
+	all, keys, err := users.Grants(ctx, c.UserID, c.CompanyID)
 	if err != nil {
 		return Power{}, err
 	}
@@ -75,14 +75,14 @@ func notAMember() error {
 
 // Caller is the gateway-verified user behind an admin API request (X-Bus-Subject, X-Bus-Company-Id).
 type Caller struct {
-	Sub       string
+	UserID    string
 	CompanyID string
 }
 
-// ValidSubject checks a subject (an identity id) given in field.
-func ValidSubject(sub, field string) error {
-	if sub == "" || len(sub) > 200 {
-		return apperror.Fail(apperror.KindInvalid, "invalid_subject", "%s is required", field)
+// ValidUserID checks a user id (the Kratos identity id, the token's sub) given in field.
+func ValidUserID(id, field string) error {
+	if id == "" || len(id) > 200 {
+		return apperror.Fail(apperror.KindInvalid, "invalid_argument", "%s is required", field)
 	}
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Config is the process configuration.
@@ -22,11 +21,11 @@ type Config struct {
 	DatabaseReadURL string
 	// RedisURL is the Redis master the gateway view is written to (the gateway reads a replica).
 	RedisURL string
-	// IdPInternalURL is the IdP UI's cluster-internal base URL (invitations).
-	IdPInternalURL string
-	KafkaBrokers   []string
-	KafkaTopic     string
-	InviteTTL      time.Duration
+	// CompanyInternalURL is the Company service's cluster-internal base URL (memberships,
+	// company statuses).
+	CompanyInternalURL string
+	KafkaBrokers       []string
+	KafkaTopic         string
 	// OTelTraces and OTelMetrics turn on the in-process telemetry (internal/telemetry): traces and
 	// app metrics over OTLP to the node's agent (OTEL_EXPORTER_OTLP_ENDPOINT). Logs need no
 	// setting: the agent collects stdout.
@@ -37,14 +36,13 @@ type Config struct {
 // Load reads configuration through getenv (pass os.Getenv in production).
 func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		PublicAddr:      orDefault(getenv("AUTHZ_PUBLIC_ADDR"), ":8080"),
-		InternalAddr:    orDefault(getenv("AUTHZ_INTERNAL_ADDR"), ":8081"),
-		DatabaseURL:     getenv("AUTHZ_DATABASE_URL"),
-		DatabaseReadURL: getenv("AUTHZ_DATABASE_READ_URL"),
-		RedisURL:        getenv("AUTHZ_REDIS_URL"),
-		IdPInternalURL:  strings.TrimSuffix(getenv("AUTHZ_IDP_INTERNAL_URL"), "/"),
-		KafkaTopic:      orDefault(getenv("AUTHZ_KAFKA_TOPIC"), "authz.events"),
-		InviteTTL:       7 * 24 * time.Hour,
+		PublicAddr:         orDefault(getenv("AUTHZ_PUBLIC_ADDR"), ":8080"),
+		InternalAddr:       orDefault(getenv("AUTHZ_INTERNAL_ADDR"), ":8081"),
+		DatabaseURL:        getenv("AUTHZ_DATABASE_URL"),
+		DatabaseReadURL:    getenv("AUTHZ_DATABASE_READ_URL"),
+		RedisURL:           getenv("AUTHZ_REDIS_URL"),
+		CompanyInternalURL: strings.TrimSuffix(orDefault(getenv("AUTHZ_COMPANY_INTERNAL_URL"), "http://company:8081"), "/"),
+		KafkaTopic:         orDefault(getenv("AUTHZ_KAFKA_TOPIC"), "authz.events"),
 	}
 	for _, b := range strings.Split(getenv("AUTHZ_KAFKA_BROKERS"), ",") {
 		if b = strings.TrimSpace(b); b != "" {
@@ -52,7 +50,6 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 
-	var err error
 	for name, dst := range map[string]*bool{"OTEL_TRACES_ENABLED": &cfg.OTelTraces, "OTEL_METRICS_ENABLED": &cfg.OTelMetrics} {
 		if v := getenv(name); v != "" {
 			b, err := strconv.ParseBool(v)
@@ -62,19 +59,11 @@ func Load(getenv func(string) string) (Config, error) {
 			*dst = b
 		}
 	}
-	if v := getenv("AUTHZ_INVITE_TTL"); v != "" {
-		if cfg.InviteTTL, err = time.ParseDuration(v); err != nil || cfg.InviteTTL <= 0 {
-			return Config{}, fmt.Errorf("AUTHZ_INVITE_TTL must be a positive duration like 168h")
-		}
-	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("AUTHZ_DATABASE_URL is required")
 	}
 	if cfg.DatabaseReadURL == "" {
 		cfg.DatabaseReadURL = cfg.DatabaseURL
-	}
-	if cfg.IdPInternalURL == "" {
-		return Config{}, fmt.Errorf("AUTHZ_IDP_INTERNAL_URL is required")
 	}
 	if cfg.RedisURL == "" {
 		return Config{}, fmt.Errorf("AUTHZ_REDIS_URL is required")

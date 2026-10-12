@@ -1,4 +1,4 @@
-package member
+package userrole
 
 import (
 	"go.uber.org/fx"
@@ -6,9 +6,9 @@ import (
 	"github.com/tanjed/bus2/authz/internal/db/uow"
 )
 
-// Module provides the member repository as Repo. It runs every query on the unit of work's querier
+// Module provides the user-role repository as Repo. It runs every query on the unit of work's querier
 // for the context: the transaction inside a write, the replica inside a read.
-var Module = fx.Module("repository.member", fx.Provide(
+var Module = fx.Module("repository.userrole", fx.Provide(
 	fx.Annotate(New, fx.As(new(Repo))),
 ))
 

@@ -13,6 +13,7 @@ type Role = rolerepo.Role
 type Input struct {
 	Name        string   `json:"name"`
 	Permissions []string `json:"permissions"`
+	LandingPath string   `json:"landing_path"`
 }
 
 // dedupe sorts ids and drops duplicates, in place.

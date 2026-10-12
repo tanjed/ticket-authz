@@ -22,58 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type InvitationStatus int32
-
-const (
-	InvitationStatus_INVITATION_STATUS_UNSPECIFIED InvitationStatus = 0
-	InvitationStatus_INVITATION_STATUS_PENDING     InvitationStatus = 1
-	InvitationStatus_INVITATION_STATUS_ACCEPTED    InvitationStatus = 2
-	InvitationStatus_INVITATION_STATUS_EXPIRED     InvitationStatus = 3
-)
-
-// Enum value maps for InvitationStatus.
-var (
-	InvitationStatus_name = map[int32]string{
-		0: "INVITATION_STATUS_UNSPECIFIED",
-		1: "INVITATION_STATUS_PENDING",
-		2: "INVITATION_STATUS_ACCEPTED",
-		3: "INVITATION_STATUS_EXPIRED",
-	}
-	InvitationStatus_value = map[string]int32{
-		"INVITATION_STATUS_UNSPECIFIED": 0,
-		"INVITATION_STATUS_PENDING":     1,
-		"INVITATION_STATUS_ACCEPTED":    2,
-		"INVITATION_STATUS_EXPIRED":     3,
-	}
-)
-
-func (x InvitationStatus) Enum() *InvitationStatus {
-	p := new(InvitationStatus)
-	*p = x
-	return p
-}
-
-func (x InvitationStatus) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (InvitationStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_bus_authz_v1_types_proto_enumTypes[0].Descriptor()
-}
-
-func (InvitationStatus) Type() protoreflect.EnumType {
-	return &file_bus_authz_v1_types_proto_enumTypes[0]
-}
-
-func (x InvitationStatus) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use InvitationStatus.Descriptor instead.
-func (InvitationStatus) EnumDescriptor() ([]byte, []int) {
-	return file_bus_authz_v1_types_proto_rawDescGZIP(), []int{0}
-}
-
 type CompanyStatus int32
 
 const (
@@ -108,11 +56,11 @@ func (x CompanyStatus) String() string {
 }
 
 func (CompanyStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_bus_authz_v1_types_proto_enumTypes[1].Descriptor()
+	return file_bus_authz_v1_types_proto_enumTypes[0].Descriptor()
 }
 
 func (CompanyStatus) Type() protoreflect.EnumType {
-	return &file_bus_authz_v1_types_proto_enumTypes[1]
+	return &file_bus_authz_v1_types_proto_enumTypes[0]
 }
 
 func (x CompanyStatus) Number() protoreflect.EnumNumber {
@@ -121,7 +69,7 @@ func (x CompanyStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CompanyStatus.Descriptor instead.
 func (CompanyStatus) EnumDescriptor() ([]byte, []int) {
-	return file_bus_authz_v1_types_proto_rawDescGZIP(), []int{1}
+	return file_bus_authz_v1_types_proto_rawDescGZIP(), []int{0}
 }
 
 // A catalogue entry: resource:action, seeded by the service that owns it.
@@ -194,10 +142,12 @@ type Role struct {
 	// Every permission, including ones added to the catalogue later.
 	GrantsAll bool `protobuf:"varint,4,opt,name=grants_all,json=grantsAll,proto3" json:"grants_all,omitempty"`
 	// Bumped on every edit.
-	Version       int32                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
-	Permissions   []string               `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	Version     int32                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Permissions []string               `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	CreateTime  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Where the provider UI lands users holding this role; empty, or an absolute in-app path.
+	LandingPath   string `protobuf:"bytes,9,opt,name=landing_path,json=landingPath,proto3" json:"landing_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -288,6 +238,13 @@ func (x *Role) GetUpdateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Role) GetLandingPath() string {
+	if x != nil {
+		return x.LandingPath
+	}
+	return ""
+}
+
 // A role as it appears in a provider's access token.
 type RoleRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -349,30 +306,29 @@ func (x *RoleRef) GetVersion() int32 {
 	return 0
 }
 
-type Member struct {
+type UserRoles struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The IdP identity id (the token's sub).
-	Sub           string                 `protobuf:"bytes,1,opt,name=sub,proto3" json:"sub,omitempty"`
-	RoleIds       []string               `protobuf:"bytes,2,rep,name=role_ids,json=roleIds,proto3" json:"role_ids,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UserId        string   `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	RoleIds       []string `protobuf:"bytes,2,rep,name=role_ids,json=roleIds,proto3" json:"role_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Member) Reset() {
-	*x = Member{}
+func (x *UserRoles) Reset() {
+	*x = UserRoles{}
 	mi := &file_bus_authz_v1_types_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Member) String() string {
+func (x *UserRoles) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Member) ProtoMessage() {}
+func (*UserRoles) ProtoMessage() {}
 
-func (x *Member) ProtoReflect() protoreflect.Message {
+func (x *UserRoles) ProtoReflect() protoreflect.Message {
 	mi := &file_bus_authz_v1_types_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -384,156 +340,23 @@ func (x *Member) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Member.ProtoReflect.Descriptor instead.
-func (*Member) Descriptor() ([]byte, []int) {
+// Deprecated: Use UserRoles.ProtoReflect.Descriptor instead.
+func (*UserRoles) Descriptor() ([]byte, []int) {
 	return file_bus_authz_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *Member) GetSub() string {
+func (x *UserRoles) GetUserId() string {
 	if x != nil {
-		return x.Sub
+		return x.UserId
 	}
 	return ""
 }
 
-func (x *Member) GetRoleIds() []string {
+func (x *UserRoles) GetRoleIds() []string {
 	if x != nil {
 		return x.RoleIds
 	}
 	return nil
-}
-
-func (x *Member) GetCreateTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreateTime
-	}
-	return nil
-}
-
-type Invitation struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	CompanyId   string                 `protobuf:"bytes,2,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
-	CompanyName string                 `protobuf:"bytes,3,opt,name=company_name,json=companyName,proto3" json:"company_name,omitempty"`
-	// E.164.
-	Phone     string   `protobuf:"bytes,4,opt,name=phone,proto3" json:"phone,omitempty"`
-	RoleIds   []string `protobuf:"bytes,5,rep,name=role_ids,json=roleIds,proto3" json:"role_ids,omitempty"`
-	InvitedBy string   `protobuf:"bytes,6,opt,name=invited_by,json=invitedBy,proto3" json:"invited_by,omitempty"`
-	// Set once accepted.
-	Sub           *string                `protobuf:"bytes,7,opt,name=sub,proto3,oneof" json:"sub,omitempty"`
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
-	AcceptTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=accept_time,json=acceptTime,proto3" json:"accept_time,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	Status        InvitationStatus       `protobuf:"varint,11,opt,name=status,proto3,enum=bus.authz.v1.InvitationStatus" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Invitation) Reset() {
-	*x = Invitation{}
-	mi := &file_bus_authz_v1_types_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Invitation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Invitation) ProtoMessage() {}
-
-func (x *Invitation) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_types_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Invitation.ProtoReflect.Descriptor instead.
-func (*Invitation) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_types_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *Invitation) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *Invitation) GetCompanyId() string {
-	if x != nil {
-		return x.CompanyId
-	}
-	return ""
-}
-
-func (x *Invitation) GetCompanyName() string {
-	if x != nil {
-		return x.CompanyName
-	}
-	return ""
-}
-
-func (x *Invitation) GetPhone() string {
-	if x != nil {
-		return x.Phone
-	}
-	return ""
-}
-
-func (x *Invitation) GetRoleIds() []string {
-	if x != nil {
-		return x.RoleIds
-	}
-	return nil
-}
-
-func (x *Invitation) GetInvitedBy() string {
-	if x != nil {
-		return x.InvitedBy
-	}
-	return ""
-}
-
-func (x *Invitation) GetSub() string {
-	if x != nil && x.Sub != nil {
-		return *x.Sub
-	}
-	return ""
-}
-
-func (x *Invitation) GetExpireTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpireTime
-	}
-	return nil
-}
-
-func (x *Invitation) GetAcceptTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.AcceptTime
-	}
-	return nil
-}
-
-func (x *Invitation) GetCreateTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreateTime
-	}
-	return nil
-}
-
-func (x *Invitation) GetStatus() InvitationStatus {
-	if x != nil {
-		return x.Status
-	}
-	return InvitationStatus_INVITATION_STATUS_UNSPECIFIED
 }
 
 var File_bus_authz_v1_types_proto protoreflect.FileDescriptor
@@ -545,7 +368,7 @@ const file_bus_authz_v1_types_proto_rawDesc = "" +
 	"Permission\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\"\x9d\x02\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\"\xc0\x02\n" +
 	"\x04Role\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
@@ -557,41 +380,15 @@ const file_bus_authz_v1_types_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"G\n" +
+	"updateTime\x12!\n" +
+	"\flanding_path\x18\t \x01(\tR\vlandingPath\"G\n" +
 	"\aRoleRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x05R\aversion\"r\n" +
-	"\x06Member\x12\x10\n" +
-	"\x03sub\x18\x01 \x01(\tR\x03sub\x12\x19\n" +
-	"\brole_ids\x18\x02 \x03(\tR\aroleIds\x12;\n" +
-	"\vcreate_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xbc\x03\n" +
-	"\n" +
-	"Invitation\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
-	"\n" +
-	"company_id\x18\x02 \x01(\tR\tcompanyId\x12!\n" +
-	"\fcompany_name\x18\x03 \x01(\tR\vcompanyName\x12\x14\n" +
-	"\x05phone\x18\x04 \x01(\tR\x05phone\x12\x19\n" +
-	"\brole_ids\x18\x05 \x03(\tR\aroleIds\x12\x1d\n" +
-	"\n" +
-	"invited_by\x18\x06 \x01(\tR\tinvitedBy\x12\x15\n" +
-	"\x03sub\x18\a \x01(\tH\x00R\x03sub\x88\x01\x01\x12;\n" +
-	"\vexpire_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\x12;\n" +
-	"\vaccept_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"acceptTime\x12;\n" +
-	"\vcreate_time\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\x126\n" +
-	"\x06status\x18\v \x01(\x0e2\x1e.bus.authz.v1.InvitationStatusR\x06statusB\x06\n" +
-	"\x04_sub*\x93\x01\n" +
-	"\x10InvitationStatus\x12!\n" +
-	"\x1dINVITATION_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19INVITATION_STATUS_PENDING\x10\x01\x12\x1e\n" +
-	"\x1aINVITATION_STATUS_ACCEPTED\x10\x02\x12\x1d\n" +
-	"\x19INVITATION_STATUS_EXPIRED\x10\x03*h\n" +
+	"\aversion\x18\x03 \x01(\x05R\aversion\"?\n" +
+	"\tUserRoles\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x19\n" +
+	"\brole_ids\x18\x02 \x03(\tR\aroleIds*h\n" +
 	"\rCompanyStatus\x12\x1e\n" +
 	"\x1aCOMPANY_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15COMPANY_STATUS_ACTIVE\x10\x01\x12\x1c\n" +
@@ -609,31 +406,24 @@ func file_bus_authz_v1_types_proto_rawDescGZIP() []byte {
 	return file_bus_authz_v1_types_proto_rawDescData
 }
 
-var file_bus_authz_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_bus_authz_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_bus_authz_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_bus_authz_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_bus_authz_v1_types_proto_goTypes = []any{
-	(InvitationStatus)(0),         // 0: bus.authz.v1.InvitationStatus
-	(CompanyStatus)(0),            // 1: bus.authz.v1.CompanyStatus
-	(*Permission)(nil),            // 2: bus.authz.v1.Permission
-	(*Role)(nil),                  // 3: bus.authz.v1.Role
-	(*RoleRef)(nil),               // 4: bus.authz.v1.RoleRef
-	(*Member)(nil),                // 5: bus.authz.v1.Member
-	(*Invitation)(nil),            // 6: bus.authz.v1.Invitation
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(CompanyStatus)(0),            // 0: bus.authz.v1.CompanyStatus
+	(*Permission)(nil),            // 1: bus.authz.v1.Permission
+	(*Role)(nil),                  // 2: bus.authz.v1.Role
+	(*RoleRef)(nil),               // 3: bus.authz.v1.RoleRef
+	(*UserRoles)(nil),             // 4: bus.authz.v1.UserRoles
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_bus_authz_v1_types_proto_depIdxs = []int32{
-	7, // 0: bus.authz.v1.Role.create_time:type_name -> google.protobuf.Timestamp
-	7, // 1: bus.authz.v1.Role.update_time:type_name -> google.protobuf.Timestamp
-	7, // 2: bus.authz.v1.Member.create_time:type_name -> google.protobuf.Timestamp
-	7, // 3: bus.authz.v1.Invitation.expire_time:type_name -> google.protobuf.Timestamp
-	7, // 4: bus.authz.v1.Invitation.accept_time:type_name -> google.protobuf.Timestamp
-	7, // 5: bus.authz.v1.Invitation.create_time:type_name -> google.protobuf.Timestamp
-	0, // 6: bus.authz.v1.Invitation.status:type_name -> bus.authz.v1.InvitationStatus
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	5, // 0: bus.authz.v1.Role.create_time:type_name -> google.protobuf.Timestamp
+	5, // 1: bus.authz.v1.Role.update_time:type_name -> google.protobuf.Timestamp
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_bus_authz_v1_types_proto_init() }
@@ -641,14 +431,13 @@ func file_bus_authz_v1_types_proto_init() {
 	if File_bus_authz_v1_types_proto != nil {
 		return
 	}
-	file_bus_authz_v1_types_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bus_authz_v1_types_proto_rawDesc), len(file_bus_authz_v1_types_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   5,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

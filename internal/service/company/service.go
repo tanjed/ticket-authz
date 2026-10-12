@@ -1,100 +1,72 @@
+// Package company answers the IdP's claims lookup and publishes company statuses. The company
+// itself (profile, status, who belongs to it) is Company's service; Authz asks it.
 package company
 
 import (
 	"context"
 	"errors"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"github.com/tanjed/bus2/authz/internal/apperror"
 	"github.com/tanjed/bus2/authz/internal/cache"
+	"github.com/tanjed/bus2/authz/internal/company"
 	"github.com/tanjed/bus2/authz/internal/db/uow"
-	"github.com/tanjed/bus2/authz/internal/events"
-	companyrepo "github.com/tanjed/bus2/authz/internal/repository/company"
-	memberrepo "github.com/tanjed/bus2/authz/internal/repository/member"
-	rolerepo "github.com/tanjed/bus2/authz/internal/repository/role"
-	"github.com/tanjed/bus2/authz/internal/service/access"
+	userrepo "github.com/tanjed/bus2/authz/internal/repository/userrole"
 )
 
-// Service registers companies, suspends them, and answers the IdP's claims lookup.
-type Service struct {
-	uow       uow.Transactor
-	cache     cache.Publisher
-	events    events.Publisher
-	companies companyrepo.Repo
-	roles     rolerepo.Repo
-	members   memberrepo.Repo
+// Statuses a caller may set (pending_setup is Company's alone and is never published).
+const (
+	StatusActive    = company.StatusActive
+	StatusSuspended = company.StatusSuspended
+)
+
+// RoleRef is a role as it appears in the token.
+type RoleRef = userrepo.RoleRef
+
+// Claims is what the IdP puts in a provider's access token. AuthzVersion is the user's
+// authorization version: the gateway refuses the token once the view holds another.
+type Claims struct {
+	CompanyID    string    `json:"company_id"`
+	Roles        []RoleRef `json:"roles"`
+	AuthzVersion int64     `json:"authz_version"`
 }
 
-// Claims resolves a subject's company and roles for a provider login.
-func (s *Service) Claims(ctx context.Context, sub string) (Claims, error) {
-	m, err := s.members.Membership(ctx, sub)
+type Service struct {
+	uow     uow.Transactor
+	cache   cache.Publisher
+	company company.Client
+	users   userrepo.Repo
+}
+
+// Claims resolves a user's company (from Company) and roles for a provider login or refresh.
+// Company unreachable is UNAVAILABLE: no token is better than one without a company.
+func (s *Service) Claims(ctx context.Context, userID string) (Claims, error) {
+	m, err := s.company.GetMembership(ctx, userID)
 	if errors.Is(err, apperror.ErrNotFound) {
-		return Claims{}, apperror.Fail(apperror.KindNotFound, "not_a_member", "subject belongs to no company")
+		return Claims{}, apperror.Fail(apperror.KindNotFound, "not_a_member", "user belongs to no company")
 	} else if err != nil {
 		return Claims{}, err
 	}
-	if m.CompanyStatus != StatusActive {
-		return Claims{}, apperror.Fail(apperror.KindForbidden, "company_suspended", "company is suspended")
+	if m.Status != company.StatusActive {
+		return Claims{}, apperror.Fail(apperror.KindForbidden, "company_suspended", "company is %s", orUnknown(m.Status))
 	}
-	c := Claims{CompanyID: m.CompanyID, AuthzVersion: m.AuthzVersion}
-	if c.Roles, err = s.members.RoleRefs(ctx, sub); err != nil {
-		return Claims{}, err
-	}
-	return c, nil
-}
-
-// Create registers a company with its protected admin role held by adminSub. Idempotent per
-// subject: if adminSub already belongs to a company, that company is returned (created=false).
-func (s *Service) Create(ctx context.Context, name, adminSub string) (companyID string, created bool, err error) {
-	if name, err = validCompanyName(name); err != nil {
-		return "", false, err
-	}
-	if err := access.ValidSubject(adminSub, "admin_sub"); err != nil {
-		return "", false, err
-	}
-	if id, err := s.companyOf(ctx, adminSub); err != nil || id != "" {
-		return id, false, err
-	}
-
-	companyID, roleID := uuid.NewString(), uuid.NewString()
-	var version int64
+	c := Claims{CompanyID: m.CompanyID}
+	// On the primary: a login right after signup or an accepted invitation must find the roles
+	// that call just wrote, whatever the replica lag.
 	err = s.uow.UnitOfWork(ctx, uow.Timeout, func(ctx context.Context) error {
-		if err := s.companies.Create(ctx, companyID, name); err != nil {
-			return err
-		}
-		if err := s.roles.Create(ctx, companyID, rolerepo.Role{ID: roleID, Name: AdminRoleName, Protected: true, GrantsAll: true}); err != nil {
-			return err
-		}
 		var err error
-		if version, err = s.members.Create(ctx, adminSub, companyID); err != nil {
+		if c.Roles, err = s.users.RoleRefs(ctx, userID, m.CompanyID); err != nil {
 			return err
 		}
-		return s.members.ReplaceRoles(ctx, companyID, adminSub, []string{roleID})
+		c.AuthzVersion, err = s.users.Version(ctx, userID)
+		return err
 	})
-	if err == nil {
-		s.cache.PutCompany(ctx, companyID, StatusActive)
-		s.cache.PutRole(ctx, cache.RoleView{CompanyID: companyID, RoleID: roleID, Permissions: []string{cache.AllPermission}})
-		s.cache.PutUserVersion(ctx, adminSub, version)
-	}
-	if errors.Is(err, apperror.ErrDuplicate) {
-		// A concurrent retry for the same subject won: answer with its company.
-		id, err := s.companyOf(ctx, adminSub)
-		return id, false, err
-	}
-	if err != nil {
-		return "", false, err
-	}
-	s.events.Publish(ctx, events.CompanyRegistered, companyID, map[string]any{
-		"company_id": companyID, "name": name, "admin_sub": adminSub, "admin_role_id": roleID,
-	})
-	return companyID, true, nil
+	return c, err
 }
 
-// SetStatus suspends or reactivates a company. The gateway denies every request of a suspended
-// company's users at once, and they can no longer sign in to provider apps.
+// SetStatus publishes a company's status to the gateway view. Company owns the status and has
+// already committed it; Authz keeps nothing. A suspended company's users are denied at once.
 func (s *Service) SetStatus(ctx context.Context, companyID, status string) error {
 	if status != StatusActive && status != StatusSuspended {
 		return apperror.Fail(apperror.KindInvalid, "invalid_status", "status must be active or suspended")
@@ -102,29 +74,13 @@ func (s *Service) SetStatus(ctx context.Context, companyID, status string) error
 	if uuid.Validate(companyID) != nil {
 		return apperror.NotFound("company")
 	}
-	changed := false
-	err := s.uow.UnitOfWork(ctx, uow.Timeout, func(ctx context.Context) error {
-		var err error
-		changed, err = s.companies.SetStatus(ctx, companyID, status)
-		if errors.Is(err, apperror.ErrNotFound) {
-			return apperror.NotFound("company")
-		}
-		return err
-	})
-	if err == nil && changed {
-		s.cache.PutCompany(ctx, companyID, status)
-	}
-	return err
+	s.cache.PutCompany(ctx, companyID, status)
+	return nil
 }
 
-func (s *Service) companyOf(ctx context.Context, sub string) (string, error) {
-	return s.members.CompanyOf(ctx, sub)
-}
-
-func validCompanyName(name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if n := utf8.RuneCountInString(name); n == 0 || n > 100 {
-		return "", apperror.Fail(apperror.KindInvalid, "invalid_name", "company name must be 1 to 100 characters")
+func orUnknown(status string) string {
+	if status == "" {
+		return "in an unknown state"
 	}
-	return name, nil
+	return status
 }

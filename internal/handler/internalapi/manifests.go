@@ -13,7 +13,7 @@ func (s *Internal) ApplyManifest(ctx context.Context, req *authzv1.ApplyManifest
 		m.Permissions = append(m.Permissions, catalogue.Permission{Key: p.GetKey(), Description: p.GetDescription(), Consumer: p.GetConsumer()})
 	}
 	for _, r := range req.GetRoutes() {
-		m.Routes = append(m.Routes, catalogue.Route{Name: r.GetName(), Permission: r.GetPermission(), Public: r.GetPublic()})
+		m.Routes = append(m.Routes, catalogue.Route{Name: r.GetName(), Permission: r.GetPermission(), Public: r.GetPublic(), Authenticated: r.GetAuthenticated()})
 	}
 	res, err := s.Catalogue.ApplyManifest(ctx, req.GetService(), m)
 	if err != nil {

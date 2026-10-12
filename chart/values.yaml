@@ -13,8 +13,9 @@ secrets:
   # writes the gateway view there; the gateway reads a replica.
   redis: { name: authz-redis }
 
-# The IdP UI's cluster-internal Service (invitations). Never its public host: the IdP refuses it.
-idpInternalUrl: http://idp-ui:3001
+# The Company service's cluster-internal Service (memberships, company statuses). Authz refuses to
+# boot while it is unreachable, and refuses logins while it is down.
+companyInternalUrl: http://company:8081
 
 # Domain events go to this topic. Kafka is not part of this chart.
 kafka:
@@ -23,7 +24,7 @@ kafka:
 
 # Who may reach which port (needs a CNI that enforces NetworkPolicy):
 #   public (8080, admin API, trusts X-Bus-* headers): only the APISIX gateway pods.
-#   internal (8081, IdP / seed Jobs): any pod in the cluster; never the gateway's routes.
+#   internal (8081, IdP / Company / seed Jobs): any pod in the cluster; never the gateway's routes.
 networkPolicy:
   gateway:
     namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: apisix } }

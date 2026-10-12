@@ -8,10 +8,9 @@ import (
 
 	"github.com/tanjed/bus2/authz/internal/service/catalogue"
 	"github.com/tanjed/bus2/authz/internal/service/company"
-	"github.com/tanjed/bus2/authz/internal/service/invitation"
-	"github.com/tanjed/bus2/authz/internal/service/member"
 	"github.com/tanjed/bus2/authz/internal/service/resync"
 	"github.com/tanjed/bus2/authz/internal/service/role"
+	"github.com/tanjed/bus2/authz/internal/service/user"
 )
 
 // Module is every service. Order matters for the start hooks: catalogue seeds Authz's own
@@ -20,7 +19,6 @@ var Module = fx.Options(
 	catalogue.Module,
 	company.Module,
 	role.Module,
-	member.Module,
-	invitation.Module,
+	user.Module,
 	resync.Module,
 )

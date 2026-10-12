@@ -12,6 +12,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/tanjed/bus2/authz/internal/cache"
+	"github.com/tanjed/bus2/authz/internal/company"
 	"github.com/tanjed/bus2/authz/internal/config"
 	"github.com/tanjed/bus2/authz/internal/db"
 	"github.com/tanjed/bus2/authz/internal/db/uow"
@@ -20,7 +21,6 @@ import (
 	healthhandler "github.com/tanjed/bus2/authz/internal/handler/health"
 	"github.com/tanjed/bus2/authz/internal/handler/internalapi"
 	"github.com/tanjed/bus2/authz/internal/health"
-	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/logging"
 	"github.com/tanjed/bus2/authz/internal/repository"
 	"github.com/tanjed/bus2/authz/internal/router"
@@ -38,7 +38,7 @@ var Modules = fx.Options(
 	health.Module,
 	cache.Module,
 	events.Module,
-	idp.Module,
+	company.Module,
 	repository.Module,
 	service.Module,
 	healthhandler.Module,

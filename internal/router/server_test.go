@@ -11,10 +11,10 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -24,6 +24,7 @@ import (
 	"github.com/tanjed/bus2/authz/api/gen/bus/authz/v1/authzv1connect"
 	"github.com/tanjed/bus2/authz/internal/apperror"
 	"github.com/tanjed/bus2/authz/internal/cache"
+	"github.com/tanjed/bus2/authz/internal/company"
 	"github.com/tanjed/bus2/authz/internal/config"
 	"github.com/tanjed/bus2/authz/internal/db"
 	"github.com/tanjed/bus2/authz/internal/db/uow"
@@ -32,15 +33,13 @@ import (
 	healthhandler "github.com/tanjed/bus2/authz/internal/handler/health"
 	"github.com/tanjed/bus2/authz/internal/handler/internalapi"
 	"github.com/tanjed/bus2/authz/internal/health"
-	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/repository"
 	"github.com/tanjed/bus2/authz/internal/router"
 	"github.com/tanjed/bus2/authz/internal/service"
 	catalogsvc "github.com/tanjed/bus2/authz/internal/service/catalogue"
-	"github.com/tanjed/bus2/authz/internal/service/company"
-	"github.com/tanjed/bus2/authz/internal/service/invitation"
-	"github.com/tanjed/bus2/authz/internal/service/member"
+	companysvc "github.com/tanjed/bus2/authz/internal/service/company"
 	"github.com/tanjed/bus2/authz/internal/service/role"
+	"github.com/tanjed/bus2/authz/internal/service/user"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -59,15 +58,26 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-var _ idp.Client = noIdP{}
+// fakeCompany is the Company service: user id -> company id, all active.
+type fakeCompany map[string]string
 
-type noIdP struct{}
+var _ company.Client = fakeCompany{}
 
-func (noIdP) IdentityByPhone(context.Context, string) (string, error) { return "", nil }
-func (noIdP) SendInvitation(context.Context, idp.Invitation) error    { return nil }
+func (f fakeCompany) GetMembership(_ context.Context, userID string) (company.Membership, error) {
+	id, ok := f[userID]
+	if !ok {
+		return company.Membership{}, apperror.ErrNotFound
+	}
+	return company.Membership{CompanyID: id, Status: company.StatusActive}, nil
+}
+
+func (f fakeCompany) ListCompanyStatuses(context.Context) (map[string]string, error) {
+	return map[string]string{}, nil
+}
 
 type stack struct {
-	h handlers
+	h  handlers
+	co fakeCompany
 	// The handlers on real sockets, cleartext HTTP/2 (gRPC needs it), and a client that speaks it.
 	publicURL, internalURL string
 	client                 *http.Client
@@ -75,32 +85,32 @@ type stack struct {
 
 // newStack builds the real handlers over a fresh database and serves them on local sockets.
 func newStack(t *testing.T) stack {
+	co := fakeCompany{}
 	t.Helper()
 	testdb.Reset(t, pool)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	var (
-		cat         *catalogsvc.Service
-		companies   *company.Service
-		roles       *role.Service
-		members     *member.Service
-		invitations *invitation.Service
+		cat       *catalogsvc.Service
+		companies *companysvc.Service
+		roles     *role.Service
+		users     *user.Service
 	)
 	// The real repository and service modules, not started: their boot hooks do not run.
 	app := fx.New(fx.NopLogger,
 		uow.Module, repository.Module, service.Module,
-		fx.Supply(db.WritePool{Pool: pool}, db.ReadPool{Pool: testdb.ReadOnly(t, pool)}, log, config.Config{InviteTTL: time.Hour}),
+		fx.Supply(db.WritePool{Pool: pool}, db.ReadPool{Pool: testdb.ReadOnly(t, pool)}, log, config.Config{}),
 		fx.Provide(
 			func() cache.Publisher { return &cache.Redis{C: rdb, Log: log} },
 			func() events.Publisher { return events.Log{Logger: log} },
-			func() idp.Client { return noIdP{} },
+			func() company.Client { return co },
 		),
-		fx.Populate(&cat, &companies, &roles, &members, &invitations),
+		fx.Populate(&cat, &companies, &roles, &users),
 	)
 	require.NoError(t, app.Err())
 	h := build(t, log,
-		admin.New(cat, roles, members, invitations),
-		internalapi.New(cat, companies, invitations),
+		admin.New(cat, roles, users),
+		internalapi.New(cat, companies, users),
 		healthhandler.New(health.New([]health.Probe{{Name: "db", Check: pool.Ping}}), log))
 	serve := func(h http.Handler) string {
 		srv := httptest.NewUnstartedServer(h)
@@ -111,8 +121,20 @@ func newStack(t *testing.T) stack {
 	}
 	protocols := new(http.Protocols)
 	protocols.SetUnencryptedHTTP2(true)
-	return stack{h: h, publicURL: serve(h.public), internalURL: serve(h.internal),
+	return stack{h: h, co: co, publicURL: serve(h.public), internalURL: serve(h.internal),
 		client: &http.Client{Transport: &http.Transport{Protocols: protocols}}}
+}
+
+// newCompany registers a company with admin user in the fake Company service and asks Authz for
+// its Admin role over REST, as Company does. It returns the company id.
+func (s stack) newCompany(t *testing.T, userID string) string {
+	t.Helper()
+	id := uuid.NewString()
+	s.co[userID] = id
+	code, body := do(t, s.h.internal, "POST", "/internal/v1/companies/"+id+"/admin", `{"user_id": "`+userID+`"}`, nil)
+	require.Equal(t, http.StatusOK, code, body)
+	require.NotEmpty(t, body["role_id"])
+	return id
 }
 
 // handlers are the two listeners' handlers, built without opening any socket.
@@ -167,14 +189,34 @@ func TestREST_InternalFlow(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, code, "unknown fields are refused")
 	require.Equal(t, "invalid_argument", body["error"])
 
-	code, body = do(t, s.h.internal, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
-	require.Equal(t, http.StatusOK, code, body)
-	require.Equal(t, true, body["created"])
+	company := s.newCompany(t, "u1")
 
 	code, body = do(t, s.h.internal, "GET", "/internal/v1/subjects/u1/claims", "", nil)
 	require.Equal(t, http.StatusOK, code)
-	require.Equal(t, body["company_id"], body["company_id"])
+	require.Equal(t, company, body["company_id"])
 	require.Len(t, body["roles"], 1)
+
+	// The removal check, the escalation check, assignment and revocation.
+	code, body = do(t, s.h.internal, "GET", "/internal/v1/companies/"+company+"/users/u1/removable", "", nil)
+	require.Equal(t, http.StatusOK, code, body)
+	require.Equal(t, false, body["removable"])
+	require.Equal(t, "last_admin", body["reason"])
+	code, body = do(t, s.h.internal, "POST", "/internal/v1/companies/"+company+"/assignable", `{"caller_user_id": "u1", "role_ids": ["`+uuid.NewString()+`"]}`, nil)
+	require.Equal(t, http.StatusNotFound, code)
+	require.Equal(t, "not_found", body["error"])
+	s.co["u2"] = company
+	code, body = do(t, s.h.internal, "PUT", "/internal/v1/companies/"+company+"/users/u2/roles", `{"role_ids": []}`, nil)
+	require.Equal(t, http.StatusOK, code, body)
+	code, body = do(t, s.h.internal, "DELETE", "/internal/v1/companies/"+company+"/users/u2", "", nil)
+	require.Equal(t, http.StatusOK, code, body)
+	code, body = do(t, s.h.internal, "PUT", "/internal/v1/companies/"+company+"/status", `{"status": "COMPANY_STATUS_SUSPENDED"}`, nil)
+	require.Equal(t, http.StatusOK, code, body)
+
+	// The removed internal APIs are gone.
+	code, _ = do(t, s.h.internal, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
+	require.Equal(t, http.StatusNotFound, code)
+	code, _ = do(t, s.h.internal, "GET", "/internal/v1/invitations/x", "", nil)
+	require.Equal(t, http.StatusNotFound, code)
 
 	code, body = do(t, s.h.internal, "GET", "/internal/v1/subjects/nobody/claims", "", nil)
 	require.Equal(t, http.StatusNotFound, code)
@@ -189,8 +231,8 @@ func TestREST_InternalFlow(t *testing.T) {
 func TestREST_AdminAPI(t *testing.T) {
 	s := newStack(t)
 	do(t, s.h.internal, "PUT", "/internal/v1/manifests/order", manifest, nil)
-	_, body := do(t, s.h.internal, "POST", "/internal/v1/companies", `{"name": "Acme", "admin_sub": "u1"}`, nil)
-	admin := map[string]string{"X-Bus-Subject": "u1", "X-Bus-Company-Id": body["company_id"].(string), "X-Bus-User-Type": "provider"}
+	company := s.newCompany(t, "u1")
+	admin := map[string]string{"X-Bus-Subject": "u1", "X-Bus-Company-Id": company, "X-Bus-User-Type": "provider"}
 
 	code, body := do(t, s.h.public, "POST", "/v1/roles", `{"name": "Clerk", "permissions": ["order:read"]}`, admin)
 	require.Equal(t, http.StatusOK, code, body)
@@ -210,6 +252,21 @@ func TestREST_AdminAPI(t *testing.T) {
 	code, body = do(t, s.h.public, "PUT", "/v1/roles/"+protectedID, `{"name": "Boss"}`, admin)
 	require.Equal(t, http.StatusBadRequest, code)
 	require.Equal(t, "protected_role", body["error"])
+
+	// Another user of the company: their roles are set and listed.
+	s.co["u2"] = company
+	code, body = do(t, s.h.public, "PUT", "/v1/members/u2/roles", `{"role_ids": ["`+role["id"].(string)+`"]}`, admin)
+	require.Equal(t, http.StatusOK, code, body)
+	code, body = do(t, s.h.public, "GET", "/v1/users/roles", "", admin)
+	require.Equal(t, http.StatusOK, code, body)
+	require.Len(t, body["users"], 2)
+	code, body = do(t, s.h.public, "PUT", "/v1/members/nobody/roles", `{"role_ids": []}`, admin)
+	require.Equal(t, http.StatusNotFound, code, "in no company")
+	require.Equal(t, "not_found", body["error"])
+	for _, gone := range [][2]string{{"GET", "/v1/members"}, {"DELETE", "/v1/members/u2"}, {"GET", "/v1/invitations"}, {"POST", "/v1/invitations"}} {
+		code, _ = do(t, s.h.public, gone[0], gone[1], "", admin)
+		require.Equal(t, http.StatusNotFound, code, gone[1])
+	}
 
 	consumer := map[string]string{"X-Bus-Subject": "u1", "X-Bus-User-Type": "consumer"}
 	code, body = do(t, s.h.public, "GET", "/v1/roles", "", consumer)
@@ -241,14 +298,16 @@ func TestGRPC_BothServices(t *testing.T) {
 		Routes:      []*authzv1.ManifestRoute{{Name: "order.read", Permission: "order:read"}},
 	})
 	require.NoError(t, err)
-	co, err := internal.CreateCompany(ctx, &authzv1.CreateCompanyRequest{Name: "Acme", AdminSub: "u1"})
+	companyID := uuid.NewString()
+	s.co["u1"] = companyID
+	_, err = internal.CreateAdminRole(ctx, &authzv1.CreateAdminRoleRequest{CompanyId: companyID, UserId: "u1"})
 	require.NoError(t, err)
 
 	_, err = internal.GetClaims(ctx, &authzv1.GetClaimsRequest{Sub: "nobody"})
 	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	require.Equal(t, "not_a_member", apperror.Reason(err), "the domain reason survives to gRPC")
 
-	md := []string{"x-bus-subject", "u1", "x-bus-company-id", co.GetCompanyId(), "x-bus-user-type", "provider"}
+	md := []string{"x-bus-subject", "u1", "x-bus-company-id", companyID, "x-bus-user-type", "provider"}
 	roles, err := admin.ListRoles(caller(ctx, md...), &authzv1.ListRolesRequest{})
 	require.NoError(t, err)
 	require.Len(t, roles.GetRoles(), 1)

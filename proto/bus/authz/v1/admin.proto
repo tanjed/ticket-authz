@@ -29,7 +29,12 @@ service AdminService {
       body: "*"
     };
   }
-  // Replaces the name and permissions. The protected role cannot be changed.
+  // The caller's own access, read fresh from the database: for the provider UI's shell.
+  rpc GetMe(GetMeRequest) returns (GetMeResponse) {
+    option (google.api.http) = {get: "/v1/me"};
+  }
+  // Replaces the name, permissions and landing path. The protected role can change its landing
+  // path only.
   rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse) {
     option (google.api.http) = {
       put: "/v1/roles/{id}"
@@ -40,29 +45,18 @@ service AdminService {
   rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse) {
     option (google.api.http) = {delete: "/v1/roles/{id}"};
   }
-  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
-    option (google.api.http) = {get: "/v1/members"};
-  }
-  // Replaces the member's roles. The company's last admin cannot lose the admin role.
+  // Replaces the roles of a user of the caller's company (Company confirms the membership). The
+  // company's last admin cannot lose the admin role.
   rpc SetMemberRoles(SetMemberRolesRequest) returns (SetMemberRolesResponse) {
     option (google.api.http) = {
       put: "/v1/members/{sub}/roles"
       body: "*"
     };
   }
-  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {
-    option (google.api.http) = {delete: "/v1/members/{sub}"};
-  }
-  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
-    option (google.api.http) = {get: "/v1/invitations"};
-  }
-  // Invites a phone number with roles; the IdP sends the link. Replaces a pending invitation for
-  // the same number. Someone who already belongs to a company cannot be invited.
-  rpc CreateInvitation(CreateInvitationRequest) returns (CreateInvitationResponse) {
-    option (google.api.http) = {
-      post: "/v1/invitations"
-      body: "*"
-    };
+  // Every user of the caller's company holding roles, with their role ids. The provider UI joins
+  // it with Company's ListUsers.
+  rpc ListUserRoles(ListUserRolesRequest) returns (ListUserRolesResponse) {
+    option (google.api.http) = {get: "/v1/users/roles"};
   }
 }
 
@@ -85,42 +79,38 @@ message GetRoleRequest {
 message CreateRoleRequest {
   string name = 1;
   repeated string permissions = 2;
+  string landing_path = 3;
 }
 
 message UpdateRoleRequest {
   string id = 1;
   string name = 2;
   repeated string permissions = 3;
+  string landing_path = 4;
+}
+
+message GetMeRequest {}
+
+message MeRole {
+  string id = 1;
+  string name = 2;
+  string landing_path = 3;
+}
+
+message GetMeResponse {
+  string user_id = 1;
+  string company_id = 2;
+  // Sorted union of the caller's roles' permissions, or ["*"] when a role grants all.
+  repeated string permissions = 3;
+  repeated MeRole roles = 4;
 }
 
 message DeleteRoleRequest {
   string id = 1;
 }
 
-message ListMembersRequest {}
-
-message ListMembersResponse {
-  repeated Member members = 1;
-}
-
 message SetMemberRolesRequest {
   string sub = 1;
-  repeated string role_ids = 2;
-}
-
-message RemoveMemberRequest {
-  string sub = 1;
-}
-
-message ListInvitationsRequest {}
-
-message ListInvitationsResponse {
-  repeated Invitation invitations = 1;
-}
-
-message CreateInvitationRequest {
-  // E.164, e.g. +8801712345678.
-  string phone = 1;
   repeated string role_ids = 2;
 }
 
@@ -140,8 +130,8 @@ message DeleteRoleResponse {}
 
 message SetMemberRolesResponse {}
 
-message RemoveMemberResponse {}
+message ListUserRolesRequest {}
 
-message CreateInvitationResponse {
-  Invitation invitation = 1;
+message ListUserRolesResponse {
+  repeated UserRoles users = 1;
 }

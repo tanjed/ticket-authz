@@ -36,7 +36,7 @@ services:
     environment:
       AUTHZ_DATABASE_URL: postgres://authz:authz@authz-postgres:5432/authz?sslmode=disable
       AUTHZ_REDIS_URL: redis://infra-redis:6379/0
-      AUTHZ_IDP_INTERNAL_URL: http://idp-ui:3001
+      AUTHZ_COMPANY_INTERNAL_URL: http://company:8081
       AUTHZ_KAFKA_BROKERS: idp-kafka:9092
       # Traces and app metrics to ../Infra's agent (Jaeger, Prometheus; Grafana on :3000). Logs need
       # nothing: the agent collects stdout.
@@ -44,7 +44,7 @@ services:
       OTEL_METRICS_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://infra-agent:4317
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local
-    # The boot fails while ../Infra's Redis is not up yet: retry.
+    # The boot fails while ../Infra's Redis or ../Company is not up yet: retry.
     restart: on-failure
     ports: ["127.0.0.1:8090:8080", "127.0.0.1:8091:8081"]
 

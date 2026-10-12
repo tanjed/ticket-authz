@@ -88,9 +88,12 @@ type ManifestRoute struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The APISIX route name (what the gateway looks up).
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// One of the manifest's permissions; empty when public.
-	Permission    string `protobuf:"bytes,2,opt,name=permission,proto3" json:"permission,omitempty"`
-	Public        bool   `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
+	// One of the manifest's permissions; empty when public or authenticated.
+	Permission string `protobuf:"bytes,2,opt,name=permission,proto3" json:"permission,omitempty"`
+	Public     bool   `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
+	// Any valid token (a provider's company active and token fresh, or a consumer) is enough; no
+	// permission is checked. Exactly one of permission, public and authenticated is set.
+	Authenticated bool `protobuf:"varint,4,opt,name=authenticated,proto3" json:"authenticated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,6 +145,13 @@ func (x *ManifestRoute) GetPermission() string {
 func (x *ManifestRoute) GetPublic() bool {
 	if x != nil {
 		return x.Public
+	}
+	return false
+}
+
+func (x *ManifestRoute) GetAuthenticated() bool {
+	if x != nil {
+		return x.Authenticated
 	}
 	return false
 }
@@ -319,110 +329,6 @@ func (x *GetClaimsRequest) GetSub() string {
 	return ""
 }
 
-type CreateCompanyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	AdminSub      string                 `protobuf:"bytes,2,opt,name=admin_sub,json=adminSub,proto3" json:"admin_sub,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateCompanyRequest) Reset() {
-	*x = CreateCompanyRequest{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateCompanyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateCompanyRequest) ProtoMessage() {}
-
-func (x *CreateCompanyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateCompanyRequest.ProtoReflect.Descriptor instead.
-func (*CreateCompanyRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *CreateCompanyRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *CreateCompanyRequest) GetAdminSub() string {
-	if x != nil {
-		return x.AdminSub
-	}
-	return ""
-}
-
-type CreateCompanyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
-	Created       bool                   `protobuf:"varint,2,opt,name=created,proto3" json:"created,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateCompanyResponse) Reset() {
-	*x = CreateCompanyResponse{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateCompanyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateCompanyResponse) ProtoMessage() {}
-
-func (x *CreateCompanyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateCompanyResponse.ProtoReflect.Descriptor instead.
-func (*CreateCompanyResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *CreateCompanyResponse) GetCompanyId() string {
-	if x != nil {
-		return x.CompanyId
-	}
-	return ""
-}
-
-func (x *CreateCompanyResponse) GetCreated() bool {
-	if x != nil {
-		return x.Created
-	}
-	return false
-}
-
 type SetCompanyStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
@@ -433,7 +339,7 @@ type SetCompanyStatusRequest struct {
 
 func (x *SetCompanyStatusRequest) Reset() {
 	*x = SetCompanyStatusRequest{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[7]
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -445,7 +351,7 @@ func (x *SetCompanyStatusRequest) String() string {
 func (*SetCompanyStatusRequest) ProtoMessage() {}
 
 func (x *SetCompanyStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[7]
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -458,7 +364,7 @@ func (x *SetCompanyStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCompanyStatusRequest.ProtoReflect.Descriptor instead.
 func (*SetCompanyStatusRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{7}
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SetCompanyStatusRequest) GetCompanyId() string {
@@ -475,102 +381,6 @@ func (x *SetCompanyStatusRequest) GetStatus() CompanyStatus {
 	return CompanyStatus_COMPANY_STATUS_UNSPECIFIED
 }
 
-type GetInvitationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetInvitationRequest) Reset() {
-	*x = GetInvitationRequest{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetInvitationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetInvitationRequest) ProtoMessage() {}
-
-func (x *GetInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetInvitationRequest.ProtoReflect.Descriptor instead.
-func (*GetInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *GetInvitationRequest) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-type AcceptInvitationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Sub           string                 `protobuf:"bytes,2,opt,name=sub,proto3" json:"sub,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AcceptInvitationRequest) Reset() {
-	*x = AcceptInvitationRequest{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AcceptInvitationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AcceptInvitationRequest) ProtoMessage() {}
-
-func (x *AcceptInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AcceptInvitationRequest.ProtoReflect.Descriptor instead.
-func (*AcceptInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *AcceptInvitationRequest) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *AcceptInvitationRequest) GetSub() string {
-	if x != nil {
-		return x.Sub
-	}
-	return ""
-}
-
 type GetClaimsResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	CompanyId string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
@@ -584,7 +394,7 @@ type GetClaimsResponse struct {
 
 func (x *GetClaimsResponse) Reset() {
 	*x = GetClaimsResponse{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[10]
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -596,7 +406,7 @@ func (x *GetClaimsResponse) String() string {
 func (*GetClaimsResponse) ProtoMessage() {}
 
 func (x *GetClaimsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[10]
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -609,7 +419,7 @@ func (x *GetClaimsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClaimsResponse.ProtoReflect.Descriptor instead.
 func (*GetClaimsResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{10}
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetClaimsResponse) GetCompanyId() string {
@@ -641,7 +451,7 @@ type SetCompanyStatusResponse struct {
 
 func (x *SetCompanyStatusResponse) Reset() {
 	*x = SetCompanyStatusResponse{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[11]
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -653,7 +463,7 @@ func (x *SetCompanyStatusResponse) String() string {
 func (*SetCompanyStatusResponse) ProtoMessage() {}
 
 func (x *SetCompanyStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[11]
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -666,31 +476,32 @@ func (x *SetCompanyStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetCompanyStatusResponse.ProtoReflect.Descriptor instead.
 func (*SetCompanyStatusResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{11}
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{7}
 }
 
-type GetInvitationResponse struct {
+type CreateAdminRoleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Invitation    *Invitation            `protobuf:"bytes,1,opt,name=invitation,proto3" json:"invitation,omitempty"`
+	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetInvitationResponse) Reset() {
-	*x = GetInvitationResponse{}
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[12]
+func (x *CreateAdminRoleRequest) Reset() {
+	*x = CreateAdminRoleRequest{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetInvitationResponse) String() string {
+func (x *CreateAdminRoleRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetInvitationResponse) ProtoMessage() {}
+func (*CreateAdminRoleRequest) ProtoMessage() {}
 
-func (x *GetInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_internal_proto_msgTypes[12]
+func (x *CreateAdminRoleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -701,38 +512,245 @@ func (x *GetInvitationResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetInvitationResponse.ProtoReflect.Descriptor instead.
-func (*GetInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{12}
+// Deprecated: Use CreateAdminRoleRequest.ProtoReflect.Descriptor instead.
+func (*CreateAdminRoleRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *GetInvitationResponse) GetInvitation() *Invitation {
+func (x *CreateAdminRoleRequest) GetCompanyId() string {
 	if x != nil {
-		return x.Invitation
+		return x.CompanyId
+	}
+	return ""
+}
+
+func (x *CreateAdminRoleRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type CreateAdminRoleResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RoleId        string                 `protobuf:"bytes,1,opt,name=role_id,json=roleId,proto3" json:"role_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateAdminRoleResponse) Reset() {
+	*x = CreateAdminRoleResponse{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateAdminRoleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateAdminRoleResponse) ProtoMessage() {}
+
+func (x *CreateAdminRoleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateAdminRoleResponse.ProtoReflect.Descriptor instead.
+func (*CreateAdminRoleResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CreateAdminRoleResponse) GetRoleId() string {
+	if x != nil {
+		return x.RoleId
+	}
+	return ""
+}
+
+type AssignRolesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	RoleIds       []string               `protobuf:"bytes,3,rep,name=role_ids,json=roleIds,proto3" json:"role_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AssignRolesRequest) Reset() {
+	*x = AssignRolesRequest{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AssignRolesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignRolesRequest) ProtoMessage() {}
+
+func (x *AssignRolesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignRolesRequest.ProtoReflect.Descriptor instead.
+func (*AssignRolesRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AssignRolesRequest) GetCompanyId() string {
+	if x != nil {
+		return x.CompanyId
+	}
+	return ""
+}
+
+func (x *AssignRolesRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *AssignRolesRequest) GetRoleIds() []string {
+	if x != nil {
+		return x.RoleIds
 	}
 	return nil
 }
 
-type AcceptInvitationResponse struct {
+type AssignRolesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AcceptInvitationResponse) Reset() {
-	*x = AcceptInvitationResponse{}
+func (x *AssignRolesResponse) Reset() {
+	*x = AssignRolesResponse{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AssignRolesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignRolesResponse) ProtoMessage() {}
+
+func (x *AssignRolesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignRolesResponse.ProtoReflect.Descriptor instead.
+func (*AssignRolesResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{11}
+}
+
+type CheckAssignableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	CallerUserId  string                 `protobuf:"bytes,2,opt,name=caller_user_id,json=callerUserId,proto3" json:"caller_user_id,omitempty"`
+	RoleIds       []string               `protobuf:"bytes,3,rep,name=role_ids,json=roleIds,proto3" json:"role_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAssignableRequest) Reset() {
+	*x = CheckAssignableRequest{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAssignableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAssignableRequest) ProtoMessage() {}
+
+func (x *CheckAssignableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAssignableRequest.ProtoReflect.Descriptor instead.
+func (*CheckAssignableRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CheckAssignableRequest) GetCompanyId() string {
+	if x != nil {
+		return x.CompanyId
+	}
+	return ""
+}
+
+func (x *CheckAssignableRequest) GetCallerUserId() string {
+	if x != nil {
+		return x.CallerUserId
+	}
+	return ""
+}
+
+func (x *CheckAssignableRequest) GetRoleIds() []string {
+	if x != nil {
+		return x.RoleIds
+	}
+	return nil
+}
+
+type CheckAssignableResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAssignableResponse) Reset() {
+	*x = CheckAssignableResponse{}
 	mi := &file_bus_authz_v1_internal_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AcceptInvitationResponse) String() string {
+func (x *CheckAssignableResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AcceptInvitationResponse) ProtoMessage() {}
+func (*CheckAssignableResponse) ProtoMessage() {}
 
-func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
+func (x *CheckAssignableResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_bus_authz_v1_internal_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -744,9 +762,201 @@ func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AcceptInvitationResponse.ProtoReflect.Descriptor instead.
-func (*AcceptInvitationResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use CheckAssignableResponse.ProtoReflect.Descriptor instead.
+func (*CheckAssignableResponse) Descriptor() ([]byte, []int) {
 	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{13}
+}
+
+type CanRemoveUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CanRemoveUserRequest) Reset() {
+	*x = CanRemoveUserRequest{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CanRemoveUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CanRemoveUserRequest) ProtoMessage() {}
+
+func (x *CanRemoveUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CanRemoveUserRequest.ProtoReflect.Descriptor instead.
+func (*CanRemoveUserRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CanRemoveUserRequest) GetCompanyId() string {
+	if x != nil {
+		return x.CompanyId
+	}
+	return ""
+}
+
+func (x *CanRemoveUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type CanRemoveUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Removable     bool                   `protobuf:"varint,1,opt,name=removable,proto3" json:"removable,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CanRemoveUserResponse) Reset() {
+	*x = CanRemoveUserResponse{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CanRemoveUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CanRemoveUserResponse) ProtoMessage() {}
+
+func (x *CanRemoveUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CanRemoveUserResponse.ProtoReflect.Descriptor instead.
+func (*CanRemoveUserResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CanRemoveUserResponse) GetRemovable() bool {
+	if x != nil {
+		return x.Removable
+	}
+	return false
+}
+
+func (x *CanRemoveUserResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RevokeUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CompanyId     string                 `protobuf:"bytes,1,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeUserRequest) Reset() {
+	*x = RevokeUserRequest{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeUserRequest) ProtoMessage() {}
+
+func (x *RevokeUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeUserRequest.ProtoReflect.Descriptor instead.
+func (*RevokeUserRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RevokeUserRequest) GetCompanyId() string {
+	if x != nil {
+		return x.CompanyId
+	}
+	return ""
+}
+
+func (x *RevokeUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type RevokeUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeUserResponse) Reset() {
+	*x = RevokeUserResponse{}
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeUserResponse) ProtoMessage() {}
+
+func (x *RevokeUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_internal_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeUserResponse.ProtoReflect.Descriptor instead.
+func (*RevokeUserResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_internal_proto_rawDescGZIP(), []int{17}
 }
 
 var File_bus_authz_v1_internal_proto protoreflect.FileDescriptor
@@ -757,13 +967,14 @@ const file_bus_authz_v1_internal_proto_rawDesc = "" +
 	"\x12ManifestPermission\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
-	"\bconsumer\x18\x03 \x01(\bR\bconsumer\"[\n" +
+	"\bconsumer\x18\x03 \x01(\bR\bconsumer\"\x81\x01\n" +
 	"\rManifestRoute\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
 	"\n" +
 	"permission\x18\x02 \x01(\tR\n" +
 	"permission\x12\x16\n" +
-	"\x06public\x18\x03 \x01(\bR\x06public\"\xa9\x01\n" +
+	"\x06public\x18\x03 \x01(\bR\x06public\x12$\n" +
+	"\rauthenticated\x18\x04 \x01(\bR\rauthenticated\"\xa9\x01\n" +
 	"\x14ApplyManifestRequest\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12B\n" +
 	"\vpermissions\x18\x02 \x03(\v2 .bus.authz.v1.ManifestPermissionR\vpermissions\x123\n" +
@@ -774,41 +985,57 @@ const file_bus_authz_v1_internal_proto_rawDesc = "" +
 	"\x06routes\x18\x03 \x01(\x05R\x06routes\x12\x18\n" +
 	"\achanged\x18\x04 \x01(\bR\achanged\"$\n" +
 	"\x10GetClaimsRequest\x12\x10\n" +
-	"\x03sub\x18\x01 \x01(\tR\x03sub\"G\n" +
-	"\x14CreateCompanyRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tadmin_sub\x18\x02 \x01(\tR\badminSub\"P\n" +
-	"\x15CreateCompanyResponse\x12\x1d\n" +
-	"\n" +
-	"company_id\x18\x01 \x01(\tR\tcompanyId\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"m\n" +
+	"\x03sub\x18\x01 \x01(\tR\x03sub\"m\n" +
 	"\x17SetCompanyStatusRequest\x12\x1d\n" +
 	"\n" +
 	"company_id\x18\x01 \x01(\tR\tcompanyId\x123\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1b.bus.authz.v1.CompanyStatusR\x06status\"&\n" +
-	"\x14GetInvitationRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\";\n" +
-	"\x17AcceptInvitationRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
-	"\x03sub\x18\x02 \x01(\tR\x03sub\"\x84\x01\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1b.bus.authz.v1.CompanyStatusR\x06status\"\x84\x01\n" +
 	"\x11GetClaimsResponse\x12\x1d\n" +
 	"\n" +
 	"company_id\x18\x01 \x01(\tR\tcompanyId\x12+\n" +
 	"\x05roles\x18\x02 \x03(\v2\x15.bus.authz.v1.RoleRefR\x05roles\x12#\n" +
 	"\rauthz_version\x18\x03 \x01(\x03R\fauthzVersion\"\x1a\n" +
-	"\x18SetCompanyStatusResponse\"Q\n" +
-	"\x15GetInvitationResponse\x128\n" +
+	"\x18SetCompanyStatusResponse\"P\n" +
+	"\x16CreateAdminRoleRequest\x12\x1d\n" +
 	"\n" +
-	"invitation\x18\x01 \x01(\v2\x18.bus.authz.v1.InvitationR\n" +
-	"invitation\"\x1a\n" +
-	"\x18AcceptInvitationResponse2\xc1\x06\n" +
+	"company_id\x18\x01 \x01(\tR\tcompanyId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"2\n" +
+	"\x17CreateAdminRoleResponse\x12\x17\n" +
+	"\arole_id\x18\x01 \x01(\tR\x06roleId\"g\n" +
+	"\x12AssignRolesRequest\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\x01 \x01(\tR\tcompanyId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x19\n" +
+	"\brole_ids\x18\x03 \x03(\tR\aroleIds\"\x15\n" +
+	"\x13AssignRolesResponse\"x\n" +
+	"\x16CheckAssignableRequest\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\x01 \x01(\tR\tcompanyId\x12$\n" +
+	"\x0ecaller_user_id\x18\x02 \x01(\tR\fcallerUserId\x12\x19\n" +
+	"\brole_ids\x18\x03 \x03(\tR\aroleIds\"\x19\n" +
+	"\x17CheckAssignableResponse\"N\n" +
+	"\x14CanRemoveUserRequest\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\x01 \x01(\tR\tcompanyId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"M\n" +
+	"\x15CanRemoveUserResponse\x12\x1c\n" +
+	"\tremovable\x18\x01 \x01(\bR\tremovable\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"K\n" +
+	"\x11RevokeUserRequest\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\x01 \x01(\tR\tcompanyId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x14\n" +
+	"\x12RevokeUserResponse2\xad\t\n" +
 	"\x0fInternalService\x12\x85\x01\n" +
 	"\rApplyManifest\x12\".bus.authz.v1.ApplyManifestRequest\x1a#.bus.authz.v1.ApplyManifestResponse\"+\x82\xd3\xe4\x93\x02%:\x01*\x1a /internal/v1/manifests/{service}\x12x\n" +
-	"\tGetClaims\x12\x1e.bus.authz.v1.GetClaimsRequest\x1a\x1f.bus.authz.v1.GetClaimsResponse\"*\x82\xd3\xe4\x93\x02$\x12\"/internal/v1/subjects/{sub}/claims\x12{\n" +
-	"\rCreateCompany\x12\".bus.authz.v1.CreateCompanyRequest\x1a#.bus.authz.v1.CreateCompanyResponse\"!\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/internal/v1/companies\x12\x98\x01\n" +
-	"\x10SetCompanyStatus\x12%.bus.authz.v1.SetCompanyStatusRequest\x1a&.bus.authz.v1.SetCompanyStatusResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\x1a*/internal/v1/companies/{company_id}/status\x12\x7f\n" +
-	"\rGetInvitation\x12\".bus.authz.v1.GetInvitationRequest\x1a#.bus.authz.v1.GetInvitationResponse\"%\x82\xd3\xe4\x93\x02\x1f\x12\x1d/internal/v1/invitations/{id}\x12\x92\x01\n" +
-	"\x10AcceptInvitation\x12%.bus.authz.v1.AcceptInvitationRequest\x1a&.bus.authz.v1.AcceptInvitationResponse\"/\x82\xd3\xe4\x93\x02):\x01*\"$/internal/v1/invitations/{id}/acceptB;Z9github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1b\x06proto3"
+	"\tGetClaims\x12\x1e.bus.authz.v1.GetClaimsRequest\x1a\x1f.bus.authz.v1.GetClaimsResponse\"*\x82\xd3\xe4\x93\x02$\x12\"/internal/v1/subjects/{sub}/claims\x12\x98\x01\n" +
+	"\x10SetCompanyStatus\x12%.bus.authz.v1.SetCompanyStatusRequest\x1a&.bus.authz.v1.SetCompanyStatusResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\x1a*/internal/v1/companies/{company_id}/status\x12\x94\x01\n" +
+	"\x0fCreateAdminRole\x12$.bus.authz.v1.CreateAdminRoleRequest\x1a%.bus.authz.v1.CreateAdminRoleResponse\"4\x82\xd3\xe4\x93\x02.:\x01*\")/internal/v1/companies/{company_id}/admin\x12\x98\x01\n" +
+	"\vAssignRoles\x12 .bus.authz.v1.AssignRolesRequest\x1a!.bus.authz.v1.AssignRolesResponse\"D\x82\xd3\xe4\x93\x02>:\x01*\x1a9/internal/v1/companies/{company_id}/users/{user_id}/roles\x12\x99\x01\n" +
+	"\x0fCheckAssignable\x12$.bus.authz.v1.CheckAssignableRequest\x1a%.bus.authz.v1.CheckAssignableResponse\"9\x82\xd3\xe4\x93\x023:\x01*\"./internal/v1/companies/{company_id}/assignable\x12\x9f\x01\n" +
+	"\rCanRemoveUser\x12\".bus.authz.v1.CanRemoveUserRequest\x1a#.bus.authz.v1.CanRemoveUserResponse\"E\x82\xd3\xe4\x93\x02?\x12=/internal/v1/companies/{company_id}/users/{user_id}/removable\x12\x8c\x01\n" +
+	"\n" +
+	"RevokeUser\x12\x1f.bus.authz.v1.RevokeUserRequest\x1a .bus.authz.v1.RevokeUserResponse\";\x82\xd3\xe4\x93\x025*3/internal/v1/companies/{company_id}/users/{user_id}B;Z9github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1b\x06proto3"
 
 var (
 	file_bus_authz_v1_internal_proto_rawDescOnce sync.Once
@@ -822,49 +1049,55 @@ func file_bus_authz_v1_internal_proto_rawDescGZIP() []byte {
 	return file_bus_authz_v1_internal_proto_rawDescData
 }
 
-var file_bus_authz_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_bus_authz_v1_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_bus_authz_v1_internal_proto_goTypes = []any{
 	(*ManifestPermission)(nil),       // 0: bus.authz.v1.ManifestPermission
 	(*ManifestRoute)(nil),            // 1: bus.authz.v1.ManifestRoute
 	(*ApplyManifestRequest)(nil),     // 2: bus.authz.v1.ApplyManifestRequest
 	(*ApplyManifestResponse)(nil),    // 3: bus.authz.v1.ApplyManifestResponse
 	(*GetClaimsRequest)(nil),         // 4: bus.authz.v1.GetClaimsRequest
-	(*CreateCompanyRequest)(nil),     // 5: bus.authz.v1.CreateCompanyRequest
-	(*CreateCompanyResponse)(nil),    // 6: bus.authz.v1.CreateCompanyResponse
-	(*SetCompanyStatusRequest)(nil),  // 7: bus.authz.v1.SetCompanyStatusRequest
-	(*GetInvitationRequest)(nil),     // 8: bus.authz.v1.GetInvitationRequest
-	(*AcceptInvitationRequest)(nil),  // 9: bus.authz.v1.AcceptInvitationRequest
-	(*GetClaimsResponse)(nil),        // 10: bus.authz.v1.GetClaimsResponse
-	(*SetCompanyStatusResponse)(nil), // 11: bus.authz.v1.SetCompanyStatusResponse
-	(*GetInvitationResponse)(nil),    // 12: bus.authz.v1.GetInvitationResponse
-	(*AcceptInvitationResponse)(nil), // 13: bus.authz.v1.AcceptInvitationResponse
-	(CompanyStatus)(0),               // 14: bus.authz.v1.CompanyStatus
-	(*RoleRef)(nil),                  // 15: bus.authz.v1.RoleRef
-	(*Invitation)(nil),               // 16: bus.authz.v1.Invitation
+	(*SetCompanyStatusRequest)(nil),  // 5: bus.authz.v1.SetCompanyStatusRequest
+	(*GetClaimsResponse)(nil),        // 6: bus.authz.v1.GetClaimsResponse
+	(*SetCompanyStatusResponse)(nil), // 7: bus.authz.v1.SetCompanyStatusResponse
+	(*CreateAdminRoleRequest)(nil),   // 8: bus.authz.v1.CreateAdminRoleRequest
+	(*CreateAdminRoleResponse)(nil),  // 9: bus.authz.v1.CreateAdminRoleResponse
+	(*AssignRolesRequest)(nil),       // 10: bus.authz.v1.AssignRolesRequest
+	(*AssignRolesResponse)(nil),      // 11: bus.authz.v1.AssignRolesResponse
+	(*CheckAssignableRequest)(nil),   // 12: bus.authz.v1.CheckAssignableRequest
+	(*CheckAssignableResponse)(nil),  // 13: bus.authz.v1.CheckAssignableResponse
+	(*CanRemoveUserRequest)(nil),     // 14: bus.authz.v1.CanRemoveUserRequest
+	(*CanRemoveUserResponse)(nil),    // 15: bus.authz.v1.CanRemoveUserResponse
+	(*RevokeUserRequest)(nil),        // 16: bus.authz.v1.RevokeUserRequest
+	(*RevokeUserResponse)(nil),       // 17: bus.authz.v1.RevokeUserResponse
+	(CompanyStatus)(0),               // 18: bus.authz.v1.CompanyStatus
+	(*RoleRef)(nil),                  // 19: bus.authz.v1.RoleRef
 }
 var file_bus_authz_v1_internal_proto_depIdxs = []int32{
 	0,  // 0: bus.authz.v1.ApplyManifestRequest.permissions:type_name -> bus.authz.v1.ManifestPermission
 	1,  // 1: bus.authz.v1.ApplyManifestRequest.routes:type_name -> bus.authz.v1.ManifestRoute
-	14, // 2: bus.authz.v1.SetCompanyStatusRequest.status:type_name -> bus.authz.v1.CompanyStatus
-	15, // 3: bus.authz.v1.GetClaimsResponse.roles:type_name -> bus.authz.v1.RoleRef
-	16, // 4: bus.authz.v1.GetInvitationResponse.invitation:type_name -> bus.authz.v1.Invitation
-	2,  // 5: bus.authz.v1.InternalService.ApplyManifest:input_type -> bus.authz.v1.ApplyManifestRequest
-	4,  // 6: bus.authz.v1.InternalService.GetClaims:input_type -> bus.authz.v1.GetClaimsRequest
-	5,  // 7: bus.authz.v1.InternalService.CreateCompany:input_type -> bus.authz.v1.CreateCompanyRequest
-	7,  // 8: bus.authz.v1.InternalService.SetCompanyStatus:input_type -> bus.authz.v1.SetCompanyStatusRequest
-	8,  // 9: bus.authz.v1.InternalService.GetInvitation:input_type -> bus.authz.v1.GetInvitationRequest
-	9,  // 10: bus.authz.v1.InternalService.AcceptInvitation:input_type -> bus.authz.v1.AcceptInvitationRequest
-	3,  // 11: bus.authz.v1.InternalService.ApplyManifest:output_type -> bus.authz.v1.ApplyManifestResponse
-	10, // 12: bus.authz.v1.InternalService.GetClaims:output_type -> bus.authz.v1.GetClaimsResponse
-	6,  // 13: bus.authz.v1.InternalService.CreateCompany:output_type -> bus.authz.v1.CreateCompanyResponse
-	11, // 14: bus.authz.v1.InternalService.SetCompanyStatus:output_type -> bus.authz.v1.SetCompanyStatusResponse
-	12, // 15: bus.authz.v1.InternalService.GetInvitation:output_type -> bus.authz.v1.GetInvitationResponse
-	13, // 16: bus.authz.v1.InternalService.AcceptInvitation:output_type -> bus.authz.v1.AcceptInvitationResponse
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	18, // 2: bus.authz.v1.SetCompanyStatusRequest.status:type_name -> bus.authz.v1.CompanyStatus
+	19, // 3: bus.authz.v1.GetClaimsResponse.roles:type_name -> bus.authz.v1.RoleRef
+	2,  // 4: bus.authz.v1.InternalService.ApplyManifest:input_type -> bus.authz.v1.ApplyManifestRequest
+	4,  // 5: bus.authz.v1.InternalService.GetClaims:input_type -> bus.authz.v1.GetClaimsRequest
+	5,  // 6: bus.authz.v1.InternalService.SetCompanyStatus:input_type -> bus.authz.v1.SetCompanyStatusRequest
+	8,  // 7: bus.authz.v1.InternalService.CreateAdminRole:input_type -> bus.authz.v1.CreateAdminRoleRequest
+	10, // 8: bus.authz.v1.InternalService.AssignRoles:input_type -> bus.authz.v1.AssignRolesRequest
+	12, // 9: bus.authz.v1.InternalService.CheckAssignable:input_type -> bus.authz.v1.CheckAssignableRequest
+	14, // 10: bus.authz.v1.InternalService.CanRemoveUser:input_type -> bus.authz.v1.CanRemoveUserRequest
+	16, // 11: bus.authz.v1.InternalService.RevokeUser:input_type -> bus.authz.v1.RevokeUserRequest
+	3,  // 12: bus.authz.v1.InternalService.ApplyManifest:output_type -> bus.authz.v1.ApplyManifestResponse
+	6,  // 13: bus.authz.v1.InternalService.GetClaims:output_type -> bus.authz.v1.GetClaimsResponse
+	7,  // 14: bus.authz.v1.InternalService.SetCompanyStatus:output_type -> bus.authz.v1.SetCompanyStatusResponse
+	9,  // 15: bus.authz.v1.InternalService.CreateAdminRole:output_type -> bus.authz.v1.CreateAdminRoleResponse
+	11, // 16: bus.authz.v1.InternalService.AssignRoles:output_type -> bus.authz.v1.AssignRolesResponse
+	13, // 17: bus.authz.v1.InternalService.CheckAssignable:output_type -> bus.authz.v1.CheckAssignableResponse
+	15, // 18: bus.authz.v1.InternalService.CanRemoveUser:output_type -> bus.authz.v1.CanRemoveUserResponse
+	17, // 19: bus.authz.v1.InternalService.RevokeUser:output_type -> bus.authz.v1.RevokeUserResponse
+	12, // [12:20] is the sub-list for method output_type
+	4,  // [4:12] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_bus_authz_v1_internal_proto_init() }
@@ -879,7 +1112,7 @@ func file_bus_authz_v1_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bus_authz_v1_internal_proto_rawDesc), len(file_bus_authz_v1_internal_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,17 +1,19 @@
 # Authz
 
-Authorization for the Bus 2.0 platform. It owns the **permission catalogue** (seeded by each service), **company roles** and **who holds which role**, and publishes it to Redis whenever it changes: Authz writes the master, the APISIX gateway (`../APISIX`) reads a replica and decides every request from it. Authz is never on the request path: it is called at login (by the IdP) and when roles change.
+Authorization for the Bus 2.0 platform. It owns the **permission catalogue** (seeded by each service), **company roles** and **who holds which role**, and publishes it to Redis whenever it changes: Authz writes the master, the APISIX gateway (`../APISIX`) reads a replica and decides every request from it. Authz is never on the request path: it is called at login (by the IdP) and when roles change. It does **not** own companies or their users: `../Company` does, and Authz asks it (at boot for company statuses, at login for a user's company); it keeps no copy.
 
 ```
-login:    IdP ──(provider client)──► Authz GetClaims ──► JWT { sub, user_type, company_id, roles, authz_version }
+login:    IdP ──(provider client)──► Authz GetClaims ──(GetMembership)──► Company
+                                        └──► JWT { sub, user_type, company_id, roles, authz_version }
 request:  client ─► APISIX (verifies the JWT, decides from the Redis replica) ─► service
 writes:   Authz ── after each commit ──► Redis master ──► replica (the gateway's)
+company:  Company ──(CreateAdminRole, AssignRoles, CheckAssignable, CanRemoveUser, RevokeUser, SetCompanyStatus)──► Authz
 seeding:  service deploy Job ── ApplyManifest ──► Authz (permissions + APISIX route map)
 ```
 
-- **Permissions** are `resource:action` (`order:create`), no API version. Each service declares its own and maps each of its APISIX routes to exactly one (or marks it public).
+- **Permissions** are `resource:action` (`order:create`), no API version. Each service declares its own and maps each of its APISIX routes to exactly one (or marks it `public`: no token, or `authenticated`: any valid token, no permission; exactly one of the three, else `invalid_route`).
 - **Consumers** (tokens from consumer clients) get the consumer permission set: the permissions services flag `consumer: true`.
-- **Providers** belong to exactly one company. Each company starts with a protected **Admin** role (every permission, can't be edited, always has a holder). Admins create roles and invite staff. Nobody can hand out permissions they don't hold (escalation rule).
+- **Providers** belong to exactly one company (Company records it). Each company gets a protected **Admin** role when Company creates it (`CreateAdminRole`: every permission, can't be edited, always has a holder). Admins create roles; Company invites staff and asks Authz to check the roles are assignable. Nobody can hand out permissions they don't hold (escalation rule).
 - Services still enforce **tenant isolation**: every query scoped by `X-Bus-Company-Id`.
 
 ## APIs: Connect, gRPC, gRPC-Web and REST on one port
@@ -20,8 +22,10 @@ Defined in `proto/bus/authz/v1`. The services are [Connect](https://connectrpc.c
 
 | Listener | Port | Reachable from | Serves |
 |---|---|---|---|
-| public | `:8080` | APISIX only | `AdminService` (roles, members, invitations) |
-| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, companies, invitations), `HealthService` |
+| public | `:8080` | APISIX only | `AdminService` (permissions, roles, `SetMemberRoles`, `ListUserRoles`, `GetMe`) |
+| internal | `:8081` | in-cluster only | `InternalService` (manifests, claims, and Company's calls: `CreateAdminRole`, `AssignRoles`, `CheckAssignable`, `CanRemoveUser`, `RevokeUser`, `SetCompanyStatus`), `HealthService` |
+
+Roles carry a `landing_path` (empty, or an absolute in-app path matching `^/(?!/)[A-Za-z0-9\-._~/]*$`, at most 200 characters; `invalid_landing_path`) that the provider UI uses after login. It is not in the gateway view: changing only the landing path (the protected Admin role may change nothing else) neither bumps the role's version nor publishes to Redis. `GET /v1/me` (`GetMe`, route `authz.me`, mode `authenticated`) returns the caller's `user_id`, `company_id`, the sorted union of their roles' live permissions (or `["*"]` when a role grants all) and their roles with landing paths, read fresh from the database.
 
 `HealthService` is the kubelet's probes: `GET /live` (liveness: the process answers, no dependency checked, so a DB outage never restarts pods) and `GET /ready` (readiness: pings every dependency; 503 / `UNAVAILABLE` naming the failed ones). No gRPC health or server reflection: tools read the schema from `proto/` (`buf curl --schema .`, `grpcurl -import-path proto -proto ...`). The public listener trusts the caller the gateway passes (`X-Bus-*` headers, also gRPC metadata); nothing else may reach it. REST errors are `{"error": <reason>, "message"}`; Connect and gRPC errors carry the same reason in `ErrorInfo`.
 
@@ -32,7 +36,7 @@ curl localhost:8091/internal/v1/subjects/u1/claims
 
 ## What Authz publishes to Redis
 
-The key contract the gateway reads, and its decision, are in `docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md`. In short: `authz:routes` (route → permission or `public`), `authz:consumer`, `authz:company:<id>` (status), `authz:company:<id>:role:<id>` (permissions, `*` for the admin role), `authz:user:<sub>:version`. A provider token whose `authz_version` differs from the published one is refused (`401 token_stale`): the client refreshes it. Role permission edits and suspensions apply at once without a refresh. Each change publishes its keys after commit, best effort; every boot resyncs the whole state (and deletes keys of what no longer exists).
+The key contract the gateway reads, and its decision, are in `docs/superpowers/specs/2026-10-06-redis-gateway-view-design.md`. In short: `authz:routes` (route → permission, `public` or `authenticated`), `authz:consumer`, `authz:company:<id>` (status), `authz:company:<id>:role:<id>` (permissions, `*` for the admin role), `authz:user:<sub>:version`. A provider token whose `authz_version` differs from the published one is refused (`401 token_stale`): the client refreshes it. Role permission edits and suspensions apply at once without a refresh. Each change publishes its keys after commit, best effort; every boot resyncs the whole state (and deletes keys of what no longer exists).
 
 ## Seeding a service
 
@@ -41,13 +45,13 @@ Every deploy, the service's Job sends its manifest (idempotent; entries it drops
 ```sh
 curl -X PUT http://authz:8081/internal/v1/manifests/order -H 'content-type: application/json' -d '{
   "permissions": [{"key": "order:create", "description": "Create an order", "consumer": true}],
-  "routes": [{"name": "order.create", "permission": "order:create"}, {"name": "order.health", "public": true}]
+  "routes": [{"name": "order.create", "permission": "order:create"}, {"name": "order.health", "public": true}, {"name": "order.me", "authenticated": true}]
 }'
 ```
 
 ## Quick start (local)
 
-Needs Go, Docker and `make`. Runs on the `shohoz` network with `../Infra` (Redis), `../IdP` and `../APISIX`.
+Needs Go, Docker and `make`. Runs on the `shohoz` network with `../Infra` (Redis), `../Company`, `../IdP` and `../APISIX`.
 
 ```sh
 make tools generate   # pinned buf + plugins into ./bin, regenerate api/ (only after editing proto/)
@@ -67,9 +71,8 @@ Local ports (loopback): public 8090, internal 8091 (every protocol on each); Pos
 | `AUTHZ_PUBLIC_ADDR` | Public listener (`:8080`) |
 | `AUTHZ_INTERNAL_ADDR` | Internal listener (`:8081`) |
 | `AUTHZ_REDIS_URL` | The Redis master Authz publishes to (required) |
-| `AUTHZ_IDP_INTERNAL_URL` | The IdP UI's cluster-internal URL (invitations; required for `serve`) |
+| `AUTHZ_COMPANY_INTERNAL_URL` | The Company service's cluster-internal URL (`http://company:8081`): memberships at login, company statuses at boot. Authz does not boot while it is unreachable |
 | `AUTHZ_KAFKA_BROKERS`, `AUTHZ_KAFKA_TOPIC` | Events (`authz.events`); no brokers: events are only logged |
-| `AUTHZ_INVITE_TTL` | Invitation lifetime (`168h`) |
 | `OTEL_TRACES_ENABLED`, `OTEL_METRICS_ENABLED` | `true` exports traces / app metrics over OTLP (default off). Logs need no setting |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | The agent (`localhost:4317` by default; compose: `http://infra-agent:4317`; chart: the node's) |
 | `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER`, ... | Standard OpenTelemetry settings, read by the SDK |
@@ -83,7 +86,7 @@ what it can see from outside, and the process adds only what it alone can see.
 |---|---|---|---|
 | Logs | the agent, from the container's stdout | JSON on stdout (`internal/logging`); a record logged with a context (`InfoContext`, `ErrorContext`, ...) inside a span carries `trace_id`/`span_id`, which link it to its trace | none |
 | Infra metrics (CPU, memory, network, disk) | the agent, from the container runtime and the host | nothing | none |
-| Traces | the process: a span per RPC (every protocol; it continues the caller's `traceparent`), with child spans per Postgres query, Redis command, IdP call, Kafka produce | `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
+| Traces | the process: a span per RPC (every protocol; it continues the caller's `traceparent`), with child spans per Postgres query, Redis command, Company call, Kafka produce | `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
 | App metrics | the process: RPC durations, Postgres and Redis pools, Kafka client, Go runtime | `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
 
 Traces and app metrics go over OTLP to `OTEL_EXPORTER_OTLP_ENDPOINT`: the node's agent (in the
@@ -103,10 +106,11 @@ and logs to Loki; Grafana (http://localhost:3000) shows all three and links a lo
 | `internal/handler/health` | HealthService handler (internal listener) |
 | `internal/apperror` | every error artifact: application errors, repository sentinels, Postgres mapping, the Connect interceptor, REST error bodies |
 | `internal/db/uow` | the unit of work: carries the transaction (or the read replica) in the context |
-| `internal/service/*` | business rules, one package + fx module per service (`access`: the escalation rule) |
+| `internal/service/*` | business rules, one package + fx module per service (`access`: the escalation rule; `user`: role assignments and Company's calls; `company`: claims and status publishing; `resync`: the boot resync) |
 | `internal/repository/*` | SQL, one package + fx module per aggregate; each owns its row types and its `Repo` interface |
 | `internal/router` | the two listeners: services per listener (fx group), Vanguard transcoders, chi routers, Connect options, the error interceptor |
 | `internal/cache` | publishes the authorization state to Redis (`Publisher`; the key contract with `../APISIX`) |
+| `internal/company` | the Company client (Connect, vendored `proto/bus/company/v1/internal.proto`: `GetMembership`, `ListCompanyStatuses`) |
 | `internal/health` | readiness probes (each dependency's package contributes one) |
 | `internal/telemetry` | Traces and app metrics: the global tracer and meter providers (no-ops unless `OTEL_TRACES_ENABLED` / `OTEL_METRICS_ENABLED`) |
 | `internal/logging` | the slog logger: JSON on stdout with trace ids (the agent collects it) |

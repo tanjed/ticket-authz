@@ -9,9 +9,9 @@ import (
 	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -20,20 +20,19 @@ import (
 	"github.com/tanjed/bus2/authz/internal/apperror"
 	"github.com/tanjed/bus2/authz/internal/cache"
 	"github.com/tanjed/bus2/authz/internal/catalogue"
+	"github.com/tanjed/bus2/authz/internal/company"
 	"github.com/tanjed/bus2/authz/internal/config"
 	"github.com/tanjed/bus2/authz/internal/db"
 	"github.com/tanjed/bus2/authz/internal/db/uow"
 	"github.com/tanjed/bus2/authz/internal/events"
-	"github.com/tanjed/bus2/authz/internal/idp"
 	"github.com/tanjed/bus2/authz/internal/repository"
 	"github.com/tanjed/bus2/authz/internal/service"
 	"github.com/tanjed/bus2/authz/internal/service/access"
 	catalogsvc "github.com/tanjed/bus2/authz/internal/service/catalogue"
-	"github.com/tanjed/bus2/authz/internal/service/company"
-	"github.com/tanjed/bus2/authz/internal/service/invitation"
-	"github.com/tanjed/bus2/authz/internal/service/member"
+	companysvc "github.com/tanjed/bus2/authz/internal/service/company"
 	"github.com/tanjed/bus2/authz/internal/service/resync"
 	"github.com/tanjed/bus2/authz/internal/service/role"
+	"github.com/tanjed/bus2/authz/internal/service/user"
 	"github.com/tanjed/bus2/authz/internal/testdb"
 )
 
@@ -79,40 +78,55 @@ func (f *fakeEvents) names() []string {
 	return out
 }
 
-type fakeIdP struct {
-	byPhone map[string]string
-	sent    []idp.Invitation
-	sendErr error
+// fakeCompany is the Company service: who belongs to which company, and each status.
+type fakeCompany struct {
+	mu       sync.Mutex
+	members  map[string]string // user id -> company id
+	statuses map[string]string // company id -> status
+	down     error
 }
 
-func (f *fakeIdP) IdentityByPhone(_ context.Context, phone string) (string, error) {
-	return f.byPhone[phone], nil
-}
-
-func (f *fakeIdP) SendInvitation(_ context.Context, inv idp.Invitation) error {
-	if f.sendErr != nil {
-		return f.sendErr
+func (f *fakeCompany) GetMembership(_ context.Context, userID string) (company.Membership, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.down != nil {
+		return company.Membership{}, f.down
 	}
-	f.sent = append(f.sent, inv)
-	return nil
+	id, ok := f.members[userID]
+	if !ok {
+		return company.Membership{}, apperror.ErrNotFound
+	}
+	return company.Membership{CompanyID: id, Status: f.statuses[id]}, nil
+}
+
+func (f *fakeCompany) ListCompanyStatuses(context.Context) (map[string]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.down != nil {
+		return nil, f.down
+	}
+	out := map[string]string{}
+	for id, st := range f.statuses {
+		out[id] = st
+	}
+	return out, nil
 }
 
 var (
 	_ events.Publisher = (*fakeEvents)(nil)
-	_ idp.Client       = (*fakeIdP)(nil)
+	_ company.Client   = (*fakeCompany)(nil)
 )
 
 type env struct {
-	catalogue   *catalogsvc.Service
-	companies   *company.Service
-	roles       *role.Service
-	members     *member.Service
-	invitations *invitation.Service
-	resync      *resync.Service
-	ev          *fakeEvents
-	idp         *fakeIdP
-	rdb         *redis.Client // what Authz published, read back as the gateway would
-	ctx         context.Context
+	catalogue *catalogsvc.Service
+	companies *companysvc.Service
+	roles     *role.Service
+	users     *user.Service
+	resync    *resync.Service
+	ev        *fakeEvents
+	co        *fakeCompany
+	rdb       *redis.Client // what Authz published, read back as the gateway would
+	ctx       context.Context
 }
 
 // newService resets the database. Tests in this package do not run in parallel.
@@ -120,21 +134,21 @@ func newService(t *testing.T) env {
 	t.Helper()
 	ctx := context.Background()
 	testdb.Reset(t, pool)
-	ev, fi := &fakeEvents{}, &fakeIdP{byPhone: map[string]string{}}
+	ev, fc := &fakeEvents{}, &fakeCompany{members: map[string]string{}, statuses: map[string]string{}}
 	rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
-	e := env{ev: ev, idp: fi, rdb: rdb, ctx: ctx}
+	e := env{ev: ev, co: fc, rdb: rdb, ctx: ctx}
 	// The real modules, not started: their boot hooks (seed, rebuild) do not run.
 	app := fx.New(fx.NopLogger,
 		uow.Module, repository.Module, service.Module,
-		fx.Supply(db.WritePool{Pool: pool}, db.ReadPool{Pool: testdb.ReadOnly(t, pool)}, slog.New(slog.NewTextHandler(io.Discard, nil)), config.Config{InviteTTL: 7 * 24 * time.Hour}),
+		fx.Supply(db.WritePool{Pool: pool}, db.ReadPool{Pool: testdb.ReadOnly(t, pool)}, slog.New(slog.NewTextHandler(io.Discard, nil)), config.Config{}),
 		fx.Provide(
 			func() cache.Publisher {
 				return &cache.Redis{C: rdb, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 			},
 			func() events.Publisher { return ev },
-			func() idp.Client { return fi },
+			func() company.Client { return fc },
 		),
-		fx.Populate(&e.catalogue, &e.companies, &e.roles, &e.members, &e.invitations, &e.resync),
+		fx.Populate(&e.catalogue, &e.companies, &e.roles, &e.users, &e.resync),
 	)
 	require.NoError(t, app.Err())
 	return e
@@ -159,13 +173,23 @@ func (e env) seed(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// company creates a company with admin sub "admin-<name>" and returns its id and admin caller.
+// company registers a company in the fake Company service with admin user "admin-<name>", then
+// asks Authz for its Admin role as Company does, and returns the id and the admin caller.
 func (e env) company(t *testing.T, name string) (string, access.Caller) {
 	t.Helper()
-	id, created, err := e.companies.Create(e.ctx, name, "admin-"+name)
+	id, admin := uuid.NewString(), "admin-"+name
+	e.co.members[admin], e.co.statuses[id] = id, company.StatusActive
+	_, err := e.users.CreateAdminRole(e.ctx, id, admin)
 	require.NoError(t, err)
-	require.True(t, created)
-	return id, access.Caller{Sub: "admin-" + name, CompanyID: id}
+	return id, access.Caller{UserID: admin, CompanyID: id}
+}
+
+// join makes userID a user of the company in the fake Company service and assigns the roles, as
+// Company does when an invitation is accepted.
+func (e env) join(t *testing.T, companyID, userID string, roleIDs ...string) {
+	t.Helper()
+	e.co.members[userID] = companyID
+	require.NoError(t, e.users.AssignRoles(e.ctx, companyID, userID, roleIDs))
 }
 
 // hash reads a published HASH (empty when the key is absent).
@@ -176,10 +200,10 @@ func (e env) hash(t *testing.T, key string) map[string]string {
 	return h
 }
 
-// version reads a member's authorization version as published; 0 when absent.
-func (e env) version(t *testing.T, sub string) int64 {
+// version reads a user's authorization version as published; 0 when absent.
+func (e env) version(t *testing.T, userID string) int64 {
 	t.Helper()
-	v, err := e.rdb.Get(e.ctx, cache.UserVersionKey(sub)).Int64()
+	v, err := e.rdb.Get(e.ctx, cache.UserVersionKey(userID)).Int64()
 	if errors.Is(err, redis.Nil) {
 		return 0
 	}

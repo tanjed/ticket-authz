@@ -28,7 +28,7 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.secrets.postgres.name }}, key: read_url, optional: true } }
             - name: AUTHZ_REDIS_URL
               valueFrom: { secretKeyRef: { name: {{ .Values.secrets.redis.name }}, key: url } }
-            - { name: AUTHZ_IDP_INTERNAL_URL, value: {{ .Values.idpInternalUrl | quote }} }
+            - { name: AUTHZ_COMPANY_INTERNAL_URL, value: {{ .Values.companyInternalUrl | quote }} }
             - { name: AUTHZ_KAFKA_BROKERS, value: {{ .Values.kafka.brokers | quote }} }
             - { name: AUTHZ_KAFKA_TOPIC, value: {{ .Values.kafka.topic | quote }} }
             # Traces and app metrics (internal/telemetry); logs and infra metrics need nothing here.
@@ -56,7 +56,7 @@ spec:
           resources: {{- toYaml .Values.resources | nindent 12 }}
 ---
 # One Service, two ports, each serving Connect, gRPC, gRPC-Web and REST (HTTP/1.1 and h2c):
-# public 8080 (gateway only), internal 8081 (the IdP, seed Jobs).
+# public 8080 (gateway only), internal 8081 (the IdP, Company, seed Jobs).
 apiVersion: v1
 kind: Service
 metadata:

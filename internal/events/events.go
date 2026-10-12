@@ -13,14 +13,10 @@ import (
 )
 
 const (
-	CompanyRegistered  = "COMPANY_REGISTERED"
 	RoleCreated        = "ROLE_CREATED"
 	RoleUpdated        = "ROLE_UPDATED"
 	RoleDeleted        = "ROLE_DELETED"
-	MemberAdded        = "MEMBER_ADDED"
 	MemberRolesChanged = "MEMBER_ROLES_CHANGED"
-	MemberRemoved      = "MEMBER_REMOVED"
-	MemberInvited      = "MEMBER_INVITED"
 )
 
 // Publisher is called after the database commit. Publishing is best effort: a failure is

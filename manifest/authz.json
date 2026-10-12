@@ -2,8 +2,7 @@
   "permissions": [
     { "key": "role:read", "description": "View the company's roles and the permission catalogue" },
     { "key": "role:manage", "description": "Create, edit and delete the company's roles" },
-    { "key": "member:read", "description": "View the company's members and invitations" },
-    { "key": "member:manage", "description": "Invite members, change their roles, remove them" }
+    { "key": "member:manage", "description": "Change the roles of the company's users" }
   ],
   "routes": [
     { "name": "authz.permissions.list", "permission": "role:read" },
@@ -12,10 +11,8 @@
     { "name": "authz.roles.create", "permission": "role:manage" },
     { "name": "authz.roles.update", "permission": "role:manage" },
     { "name": "authz.roles.delete", "permission": "role:manage" },
-    { "name": "authz.members.list", "permission": "member:read" },
+    { "name": "authz.users.roles", "permission": "role:read" },
     { "name": "authz.members.roles", "permission": "member:manage" },
-    { "name": "authz.members.remove", "permission": "member:manage" },
-    { "name": "authz.invitations.list", "permission": "member:read" },
-    { "name": "authz.invitations.create", "permission": "member:manage" }
+    { "name": "authz.me", "authenticated": true }
   ]
 }

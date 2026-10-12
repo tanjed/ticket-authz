@@ -40,7 +40,7 @@ func (a *Admin) CreateRole(ctx context.Context, req *authzv1.CreateRoleRequest) 
 	if err != nil {
 		return nil, err
 	}
-	r, err := a.Roles.Create(ctx, c, role.Input{Name: req.GetName(), Permissions: req.GetPermissions()})
+	r, err := a.Roles.Create(ctx, c, role.Input{Name: req.GetName(), Permissions: req.GetPermissions(), LandingPath: req.GetLandingPath()})
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (a *Admin) UpdateRole(ctx context.Context, req *authzv1.UpdateRoleRequest) 
 	if err != nil {
 		return nil, err
 	}
-	r, err := a.Roles.Update(ctx, c, req.GetId(), role.Input{Name: req.GetName(), Permissions: req.GetPermissions()})
+	r, err := a.Roles.Update(ctx, c, req.GetId(), role.Input{Name: req.GetName(), Permissions: req.GetPermissions(), LandingPath: req.GetLandingPath()})
 	if err != nil {
 		return nil, err
 	}

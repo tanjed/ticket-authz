@@ -230,6 +230,7 @@ type CreateRoleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Permissions   []string               `protobuf:"bytes,2,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	LandingPath   string                 `protobuf:"bytes,3,opt,name=landing_path,json=landingPath,proto3" json:"landing_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -278,11 +279,19 @@ func (x *CreateRoleRequest) GetPermissions() []string {
 	return nil
 }
 
+func (x *CreateRoleRequest) GetLandingPath() string {
+	if x != nil {
+		return x.LandingPath
+	}
+	return ""
+}
+
 type UpdateRoleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Permissions   []string               `protobuf:"bytes,3,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	LandingPath   string                 `protobuf:"bytes,4,opt,name=landing_path,json=landingPath,proto3" json:"landing_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -338,6 +347,178 @@ func (x *UpdateRoleRequest) GetPermissions() []string {
 	return nil
 }
 
+func (x *UpdateRoleRequest) GetLandingPath() string {
+	if x != nil {
+		return x.LandingPath
+	}
+	return ""
+}
+
+type GetMeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMeRequest) Reset() {
+	*x = GetMeRequest{}
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMeRequest) ProtoMessage() {}
+
+func (x *GetMeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMeRequest.ProtoReflect.Descriptor instead.
+func (*GetMeRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{7}
+}
+
+type MeRole struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	LandingPath   string                 `protobuf:"bytes,3,opt,name=landing_path,json=landingPath,proto3" json:"landing_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MeRole) Reset() {
+	*x = MeRole{}
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MeRole) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MeRole) ProtoMessage() {}
+
+func (x *MeRole) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MeRole.ProtoReflect.Descriptor instead.
+func (*MeRole) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MeRole) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MeRole) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MeRole) GetLandingPath() string {
+	if x != nil {
+		return x.LandingPath
+	}
+	return ""
+}
+
+type GetMeResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	UserId    string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	CompanyId string                 `protobuf:"bytes,2,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	// Sorted union of the caller's roles' permissions, or ["*"] when a role grants all.
+	Permissions   []string  `protobuf:"bytes,3,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	Roles         []*MeRole `protobuf:"bytes,4,rep,name=roles,proto3" json:"roles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMeResponse) Reset() {
+	*x = GetMeResponse{}
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMeResponse) ProtoMessage() {}
+
+func (x *GetMeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMeResponse.ProtoReflect.Descriptor instead.
+func (*GetMeResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetMeResponse) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *GetMeResponse) GetCompanyId() string {
+	if x != nil {
+		return x.CompanyId
+	}
+	return ""
+}
+
+func (x *GetMeResponse) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *GetMeResponse) GetRoles() []*MeRole {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
 type DeleteRoleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -347,7 +528,7 @@ type DeleteRoleRequest struct {
 
 func (x *DeleteRoleRequest) Reset() {
 	*x = DeleteRoleRequest{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[7]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -359,7 +540,7 @@ func (x *DeleteRoleRequest) String() string {
 func (*DeleteRoleRequest) ProtoMessage() {}
 
 func (x *DeleteRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[7]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -372,7 +553,7 @@ func (x *DeleteRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRoleRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{7}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteRoleRequest) GetId() string {
@@ -380,86 +561,6 @@ func (x *DeleteRoleRequest) GetId() string {
 		return x.Id
 	}
 	return ""
-}
-
-type ListMembersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMembersRequest) Reset() {
-	*x = ListMembersRequest{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMembersRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMembersRequest) ProtoMessage() {}
-
-func (x *ListMembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMembersRequest.ProtoReflect.Descriptor instead.
-func (*ListMembersRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{8}
-}
-
-type ListMembersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Members       []*Member              `protobuf:"bytes,1,rep,name=members,proto3" json:"members,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMembersResponse) Reset() {
-	*x = ListMembersResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMembersResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMembersResponse) ProtoMessage() {}
-
-func (x *ListMembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMembersResponse.ProtoReflect.Descriptor instead.
-func (*ListMembersResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ListMembersResponse) GetMembers() []*Member {
-	if x != nil {
-		return x.Members
-	}
-	return nil
 }
 
 type SetMemberRolesRequest struct {
@@ -472,7 +573,7 @@ type SetMemberRolesRequest struct {
 
 func (x *SetMemberRolesRequest) Reset() {
 	*x = SetMemberRolesRequest{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[10]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -484,7 +585,7 @@ func (x *SetMemberRolesRequest) String() string {
 func (*SetMemberRolesRequest) ProtoMessage() {}
 
 func (x *SetMemberRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[10]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -497,7 +598,7 @@ func (x *SetMemberRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemberRolesRequest.ProtoReflect.Descriptor instead.
 func (*SetMemberRolesRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{10}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SetMemberRolesRequest) GetSub() string {
@@ -514,183 +615,6 @@ func (x *SetMemberRolesRequest) GetRoleIds() []string {
 	return nil
 }
 
-type RemoveMemberRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sub           string                 `protobuf:"bytes,1,opt,name=sub,proto3" json:"sub,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RemoveMemberRequest) Reset() {
-	*x = RemoveMemberRequest{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RemoveMemberRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RemoveMemberRequest) ProtoMessage() {}
-
-func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RemoveMemberRequest.ProtoReflect.Descriptor instead.
-func (*RemoveMemberRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *RemoveMemberRequest) GetSub() string {
-	if x != nil {
-		return x.Sub
-	}
-	return ""
-}
-
-type ListInvitationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListInvitationsRequest) Reset() {
-	*x = ListInvitationsRequest{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListInvitationsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListInvitationsRequest) ProtoMessage() {}
-
-func (x *ListInvitationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListInvitationsRequest.ProtoReflect.Descriptor instead.
-func (*ListInvitationsRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{12}
-}
-
-type ListInvitationsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Invitations   []*Invitation          `protobuf:"bytes,1,rep,name=invitations,proto3" json:"invitations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListInvitationsResponse) Reset() {
-	*x = ListInvitationsResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListInvitationsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListInvitationsResponse) ProtoMessage() {}
-
-func (x *ListInvitationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListInvitationsResponse.ProtoReflect.Descriptor instead.
-func (*ListInvitationsResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *ListInvitationsResponse) GetInvitations() []*Invitation {
-	if x != nil {
-		return x.Invitations
-	}
-	return nil
-}
-
-type CreateInvitationRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// E.164, e.g. +8801712345678.
-	Phone         string   `protobuf:"bytes,1,opt,name=phone,proto3" json:"phone,omitempty"`
-	RoleIds       []string `protobuf:"bytes,2,rep,name=role_ids,json=roleIds,proto3" json:"role_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateInvitationRequest) Reset() {
-	*x = CreateInvitationRequest{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateInvitationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateInvitationRequest) ProtoMessage() {}
-
-func (x *CreateInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateInvitationRequest.ProtoReflect.Descriptor instead.
-func (*CreateInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *CreateInvitationRequest) GetPhone() string {
-	if x != nil {
-		return x.Phone
-	}
-	return ""
-}
-
-func (x *CreateInvitationRequest) GetRoleIds() []string {
-	if x != nil {
-		return x.RoleIds
-	}
-	return nil
-}
-
 type GetRoleResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Role          *Role                  `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
@@ -700,7 +624,7 @@ type GetRoleResponse struct {
 
 func (x *GetRoleResponse) Reset() {
 	*x = GetRoleResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[15]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -712,7 +636,7 @@ func (x *GetRoleResponse) String() string {
 func (*GetRoleResponse) ProtoMessage() {}
 
 func (x *GetRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[15]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -725,7 +649,7 @@ func (x *GetRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRoleResponse.ProtoReflect.Descriptor instead.
 func (*GetRoleResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{15}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetRoleResponse) GetRole() *Role {
@@ -744,7 +668,7 @@ type CreateRoleResponse struct {
 
 func (x *CreateRoleResponse) Reset() {
 	*x = CreateRoleResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[16]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -756,7 +680,7 @@ func (x *CreateRoleResponse) String() string {
 func (*CreateRoleResponse) ProtoMessage() {}
 
 func (x *CreateRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[16]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -769,7 +693,7 @@ func (x *CreateRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRoleResponse.ProtoReflect.Descriptor instead.
 func (*CreateRoleResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{16}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateRoleResponse) GetRole() *Role {
@@ -788,7 +712,7 @@ type UpdateRoleResponse struct {
 
 func (x *UpdateRoleResponse) Reset() {
 	*x = UpdateRoleResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[17]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -800,7 +724,7 @@ func (x *UpdateRoleResponse) String() string {
 func (*UpdateRoleResponse) ProtoMessage() {}
 
 func (x *UpdateRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[17]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -813,7 +737,7 @@ func (x *UpdateRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRoleResponse.ProtoReflect.Descriptor instead.
 func (*UpdateRoleResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{17}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UpdateRoleResponse) GetRole() *Role {
@@ -831,7 +755,7 @@ type DeleteRoleResponse struct {
 
 func (x *DeleteRoleResponse) Reset() {
 	*x = DeleteRoleResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[18]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -843,7 +767,7 @@ func (x *DeleteRoleResponse) String() string {
 func (*DeleteRoleResponse) ProtoMessage() {}
 
 func (x *DeleteRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[18]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -856,7 +780,7 @@ func (x *DeleteRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRoleResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRoleResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{18}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{15}
 }
 
 type SetMemberRolesResponse struct {
@@ -867,7 +791,7 @@ type SetMemberRolesResponse struct {
 
 func (x *SetMemberRolesResponse) Reset() {
 	*x = SetMemberRolesResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[19]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -879,7 +803,7 @@ func (x *SetMemberRolesResponse) String() string {
 func (*SetMemberRolesResponse) ProtoMessage() {}
 
 func (x *SetMemberRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[19]
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -892,30 +816,30 @@ func (x *SetMemberRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemberRolesResponse.ProtoReflect.Descriptor instead.
 func (*SetMemberRolesResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{19}
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{16}
 }
 
-type RemoveMemberResponse struct {
+type ListUserRolesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RemoveMemberResponse) Reset() {
-	*x = RemoveMemberResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[20]
+func (x *ListUserRolesRequest) Reset() {
+	*x = ListUserRolesRequest{}
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RemoveMemberResponse) String() string {
+func (x *ListUserRolesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RemoveMemberResponse) ProtoMessage() {}
+func (*ListUserRolesRequest) ProtoMessage() {}
 
-func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[20]
+func (x *ListUserRolesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -926,33 +850,33 @@ func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveMemberResponse.ProtoReflect.Descriptor instead.
-func (*RemoveMemberResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{20}
+// Deprecated: Use ListUserRolesRequest.ProtoReflect.Descriptor instead.
+func (*ListUserRolesRequest) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{17}
 }
 
-type CreateInvitationResponse struct {
+type ListUserRolesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Invitation    *Invitation            `protobuf:"bytes,1,opt,name=invitation,proto3" json:"invitation,omitempty"`
+	Users         []*UserRoles           `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreateInvitationResponse) Reset() {
-	*x = CreateInvitationResponse{}
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[21]
+func (x *ListUserRolesResponse) Reset() {
+	*x = ListUserRolesResponse{}
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateInvitationResponse) String() string {
+func (x *ListUserRolesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateInvitationResponse) ProtoMessage() {}
+func (*ListUserRolesResponse) ProtoMessage() {}
 
-func (x *CreateInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_bus_authz_v1_admin_proto_msgTypes[21]
+func (x *ListUserRolesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bus_authz_v1_admin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -963,14 +887,14 @@ func (x *CreateInvitationResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateInvitationResponse.ProtoReflect.Descriptor instead.
-func (*CreateInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{21}
+// Deprecated: Use ListUserRolesResponse.ProtoReflect.Descriptor instead.
+func (*ListUserRolesResponse) Descriptor() ([]byte, []int) {
+	return file_bus_authz_v1_admin_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *CreateInvitationResponse) GetInvitation() *Invitation {
+func (x *ListUserRolesResponse) GetUsers() []*UserRoles {
 	if x != nil {
-		return x.Invitation
+		return x.Users
 	}
 	return nil
 }
@@ -987,29 +911,31 @@ const file_bus_authz_v1_admin_proto_rawDesc = "" +
 	"\x11ListRolesResponse\x12(\n" +
 	"\x05roles\x18\x01 \x03(\v2\x12.bus.authz.v1.RoleR\x05roles\" \n" +
 	"\x0eGetRoleRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"I\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"l\n" +
 	"\x11CreateRoleRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vpermissions\x18\x02 \x03(\tR\vpermissions\"Y\n" +
+	"\vpermissions\x18\x02 \x03(\tR\vpermissions\x12!\n" +
+	"\flanding_path\x18\x03 \x01(\tR\vlandingPath\"|\n" +
 	"\x11UpdateRoleRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
-	"\vpermissions\x18\x03 \x03(\tR\vpermissions\"#\n" +
+	"\vpermissions\x18\x03 \x03(\tR\vpermissions\x12!\n" +
+	"\flanding_path\x18\x04 \x01(\tR\vlandingPath\"\x0e\n" +
+	"\fGetMeRequest\"O\n" +
+	"\x06MeRole\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
+	"\flanding_path\x18\x03 \x01(\tR\vlandingPath\"\x95\x01\n" +
+	"\rGetMeResponse\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\x02 \x01(\tR\tcompanyId\x12 \n" +
+	"\vpermissions\x18\x03 \x03(\tR\vpermissions\x12*\n" +
+	"\x05roles\x18\x04 \x03(\v2\x14.bus.authz.v1.MeRoleR\x05roles\"#\n" +
 	"\x11DeleteRoleRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x14\n" +
-	"\x12ListMembersRequest\"E\n" +
-	"\x13ListMembersResponse\x12.\n" +
-	"\amembers\x18\x01 \x03(\v2\x14.bus.authz.v1.MemberR\amembers\"D\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"D\n" +
 	"\x15SetMemberRolesRequest\x12\x10\n" +
 	"\x03sub\x18\x01 \x01(\tR\x03sub\x12\x19\n" +
-	"\brole_ids\x18\x02 \x03(\tR\aroleIds\"'\n" +
-	"\x13RemoveMemberRequest\x12\x10\n" +
-	"\x03sub\x18\x01 \x01(\tR\x03sub\"\x18\n" +
-	"\x16ListInvitationsRequest\"U\n" +
-	"\x17ListInvitationsResponse\x12:\n" +
-	"\vinvitations\x18\x01 \x03(\v2\x18.bus.authz.v1.InvitationR\vinvitations\"J\n" +
-	"\x17CreateInvitationRequest\x12\x14\n" +
-	"\x05phone\x18\x01 \x01(\tR\x05phone\x12\x19\n" +
 	"\brole_ids\x18\x02 \x03(\tR\aroleIds\"9\n" +
 	"\x0fGetRoleResponse\x12&\n" +
 	"\x04role\x18\x01 \x01(\v2\x12.bus.authz.v1.RoleR\x04role\"<\n" +
@@ -1019,26 +945,22 @@ const file_bus_authz_v1_admin_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\v2\x12.bus.authz.v1.RoleR\x04role\"\x14\n" +
 	"\x12DeleteRoleResponse\"\x18\n" +
 	"\x16SetMemberRolesResponse\"\x16\n" +
-	"\x14RemoveMemberResponse\"T\n" +
-	"\x18CreateInvitationResponse\x128\n" +
-	"\n" +
-	"invitation\x18\x01 \x01(\v2\x18.bus.authz.v1.InvitationR\n" +
-	"invitation2\xd8\t\n" +
+	"\x14ListUserRolesRequest\"F\n" +
+	"\x15ListUserRolesResponse\x12-\n" +
+	"\x05users\x18\x01 \x03(\v2\x17.bus.authz.v1.UserRolesR\x05users2\xca\a\n" +
 	"\fAdminService\x12w\n" +
 	"\x0fListPermissions\x12$.bus.authz.v1.ListPermissionsRequest\x1a%.bus.authz.v1.ListPermissionsResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/permissions\x12_\n" +
 	"\tListRoles\x12\x1e.bus.authz.v1.ListRolesRequest\x1a\x1f.bus.authz.v1.ListRolesResponse\"\x11\x82\xd3\xe4\x93\x02\v\x12\t/v1/roles\x12^\n" +
 	"\aGetRole\x12\x1c.bus.authz.v1.GetRoleRequest\x1a\x1d.bus.authz.v1.GetRoleResponse\"\x16\x82\xd3\xe4\x93\x02\x10\x12\x0e/v1/roles/{id}\x12e\n" +
 	"\n" +
-	"CreateRole\x12\x1f.bus.authz.v1.CreateRoleRequest\x1a .bus.authz.v1.CreateRoleResponse\"\x14\x82\xd3\xe4\x93\x02\x0e:\x01*\"\t/v1/roles\x12j\n" +
+	"CreateRole\x12\x1f.bus.authz.v1.CreateRoleRequest\x1a .bus.authz.v1.CreateRoleResponse\"\x14\x82\xd3\xe4\x93\x02\x0e:\x01*\"\t/v1/roles\x12P\n" +
+	"\x05GetMe\x12\x1a.bus.authz.v1.GetMeRequest\x1a\x1b.bus.authz.v1.GetMeResponse\"\x0e\x82\xd3\xe4\x93\x02\b\x12\x06/v1/me\x12j\n" +
 	"\n" +
 	"UpdateRole\x12\x1f.bus.authz.v1.UpdateRoleRequest\x1a .bus.authz.v1.UpdateRoleResponse\"\x19\x82\xd3\xe4\x93\x02\x13:\x01*\x1a\x0e/v1/roles/{id}\x12g\n" +
 	"\n" +
-	"DeleteRole\x12\x1f.bus.authz.v1.DeleteRoleRequest\x1a .bus.authz.v1.DeleteRoleResponse\"\x16\x82\xd3\xe4\x93\x02\x10*\x0e/v1/roles/{id}\x12g\n" +
-	"\vListMembers\x12 .bus.authz.v1.ListMembersRequest\x1a!.bus.authz.v1.ListMembersResponse\"\x13\x82\xd3\xe4\x93\x02\r\x12\v/v1/members\x12\x7f\n" +
-	"\x0eSetMemberRoles\x12#.bus.authz.v1.SetMemberRolesRequest\x1a$.bus.authz.v1.SetMemberRolesResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\x1a\x17/v1/members/{sub}/roles\x12p\n" +
-	"\fRemoveMember\x12!.bus.authz.v1.RemoveMemberRequest\x1a\".bus.authz.v1.RemoveMemberResponse\"\x19\x82\xd3\xe4\x93\x02\x13*\x11/v1/members/{sub}\x12w\n" +
-	"\x0fListInvitations\x12$.bus.authz.v1.ListInvitationsRequest\x1a%.bus.authz.v1.ListInvitationsResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/invitations\x12}\n" +
-	"\x10CreateInvitation\x12%.bus.authz.v1.CreateInvitationRequest\x1a&.bus.authz.v1.CreateInvitationResponse\"\x1a\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/v1/invitationsB;Z9github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1b\x06proto3"
+	"DeleteRole\x12\x1f.bus.authz.v1.DeleteRoleRequest\x1a .bus.authz.v1.DeleteRoleResponse\"\x16\x82\xd3\xe4\x93\x02\x10*\x0e/v1/roles/{id}\x12\x7f\n" +
+	"\x0eSetMemberRoles\x12#.bus.authz.v1.SetMemberRolesRequest\x1a$.bus.authz.v1.SetMemberRolesResponse\"\"\x82\xd3\xe4\x93\x02\x1c:\x01*\x1a\x17/v1/members/{sub}/roles\x12q\n" +
+	"\rListUserRoles\x12\".bus.authz.v1.ListUserRolesRequest\x1a#.bus.authz.v1.ListUserRolesResponse\"\x17\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/users/rolesB;Z9github.com/tanjed/bus2/authz/api/gen/bus/authz/v1;authzv1b\x06proto3"
 
 var (
 	file_bus_authz_v1_admin_proto_rawDescOnce sync.Once
@@ -1052,71 +974,62 @@ func file_bus_authz_v1_admin_proto_rawDescGZIP() []byte {
 	return file_bus_authz_v1_admin_proto_rawDescData
 }
 
-var file_bus_authz_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_bus_authz_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_bus_authz_v1_admin_proto_goTypes = []any{
-	(*ListPermissionsRequest)(nil),   // 0: bus.authz.v1.ListPermissionsRequest
-	(*ListPermissionsResponse)(nil),  // 1: bus.authz.v1.ListPermissionsResponse
-	(*ListRolesRequest)(nil),         // 2: bus.authz.v1.ListRolesRequest
-	(*ListRolesResponse)(nil),        // 3: bus.authz.v1.ListRolesResponse
-	(*GetRoleRequest)(nil),           // 4: bus.authz.v1.GetRoleRequest
-	(*CreateRoleRequest)(nil),        // 5: bus.authz.v1.CreateRoleRequest
-	(*UpdateRoleRequest)(nil),        // 6: bus.authz.v1.UpdateRoleRequest
-	(*DeleteRoleRequest)(nil),        // 7: bus.authz.v1.DeleteRoleRequest
-	(*ListMembersRequest)(nil),       // 8: bus.authz.v1.ListMembersRequest
-	(*ListMembersResponse)(nil),      // 9: bus.authz.v1.ListMembersResponse
-	(*SetMemberRolesRequest)(nil),    // 10: bus.authz.v1.SetMemberRolesRequest
-	(*RemoveMemberRequest)(nil),      // 11: bus.authz.v1.RemoveMemberRequest
-	(*ListInvitationsRequest)(nil),   // 12: bus.authz.v1.ListInvitationsRequest
-	(*ListInvitationsResponse)(nil),  // 13: bus.authz.v1.ListInvitationsResponse
-	(*CreateInvitationRequest)(nil),  // 14: bus.authz.v1.CreateInvitationRequest
-	(*GetRoleResponse)(nil),          // 15: bus.authz.v1.GetRoleResponse
-	(*CreateRoleResponse)(nil),       // 16: bus.authz.v1.CreateRoleResponse
-	(*UpdateRoleResponse)(nil),       // 17: bus.authz.v1.UpdateRoleResponse
-	(*DeleteRoleResponse)(nil),       // 18: bus.authz.v1.DeleteRoleResponse
-	(*SetMemberRolesResponse)(nil),   // 19: bus.authz.v1.SetMemberRolesResponse
-	(*RemoveMemberResponse)(nil),     // 20: bus.authz.v1.RemoveMemberResponse
-	(*CreateInvitationResponse)(nil), // 21: bus.authz.v1.CreateInvitationResponse
-	(*Permission)(nil),               // 22: bus.authz.v1.Permission
-	(*Role)(nil),                     // 23: bus.authz.v1.Role
-	(*Member)(nil),                   // 24: bus.authz.v1.Member
-	(*Invitation)(nil),               // 25: bus.authz.v1.Invitation
+	(*ListPermissionsRequest)(nil),  // 0: bus.authz.v1.ListPermissionsRequest
+	(*ListPermissionsResponse)(nil), // 1: bus.authz.v1.ListPermissionsResponse
+	(*ListRolesRequest)(nil),        // 2: bus.authz.v1.ListRolesRequest
+	(*ListRolesResponse)(nil),       // 3: bus.authz.v1.ListRolesResponse
+	(*GetRoleRequest)(nil),          // 4: bus.authz.v1.GetRoleRequest
+	(*CreateRoleRequest)(nil),       // 5: bus.authz.v1.CreateRoleRequest
+	(*UpdateRoleRequest)(nil),       // 6: bus.authz.v1.UpdateRoleRequest
+	(*GetMeRequest)(nil),            // 7: bus.authz.v1.GetMeRequest
+	(*MeRole)(nil),                  // 8: bus.authz.v1.MeRole
+	(*GetMeResponse)(nil),           // 9: bus.authz.v1.GetMeResponse
+	(*DeleteRoleRequest)(nil),       // 10: bus.authz.v1.DeleteRoleRequest
+	(*SetMemberRolesRequest)(nil),   // 11: bus.authz.v1.SetMemberRolesRequest
+	(*GetRoleResponse)(nil),         // 12: bus.authz.v1.GetRoleResponse
+	(*CreateRoleResponse)(nil),      // 13: bus.authz.v1.CreateRoleResponse
+	(*UpdateRoleResponse)(nil),      // 14: bus.authz.v1.UpdateRoleResponse
+	(*DeleteRoleResponse)(nil),      // 15: bus.authz.v1.DeleteRoleResponse
+	(*SetMemberRolesResponse)(nil),  // 16: bus.authz.v1.SetMemberRolesResponse
+	(*ListUserRolesRequest)(nil),    // 17: bus.authz.v1.ListUserRolesRequest
+	(*ListUserRolesResponse)(nil),   // 18: bus.authz.v1.ListUserRolesResponse
+	(*Permission)(nil),              // 19: bus.authz.v1.Permission
+	(*Role)(nil),                    // 20: bus.authz.v1.Role
+	(*UserRoles)(nil),               // 21: bus.authz.v1.UserRoles
 }
 var file_bus_authz_v1_admin_proto_depIdxs = []int32{
-	22, // 0: bus.authz.v1.ListPermissionsResponse.permissions:type_name -> bus.authz.v1.Permission
-	23, // 1: bus.authz.v1.ListRolesResponse.roles:type_name -> bus.authz.v1.Role
-	24, // 2: bus.authz.v1.ListMembersResponse.members:type_name -> bus.authz.v1.Member
-	25, // 3: bus.authz.v1.ListInvitationsResponse.invitations:type_name -> bus.authz.v1.Invitation
-	23, // 4: bus.authz.v1.GetRoleResponse.role:type_name -> bus.authz.v1.Role
-	23, // 5: bus.authz.v1.CreateRoleResponse.role:type_name -> bus.authz.v1.Role
-	23, // 6: bus.authz.v1.UpdateRoleResponse.role:type_name -> bus.authz.v1.Role
-	25, // 7: bus.authz.v1.CreateInvitationResponse.invitation:type_name -> bus.authz.v1.Invitation
-	0,  // 8: bus.authz.v1.AdminService.ListPermissions:input_type -> bus.authz.v1.ListPermissionsRequest
-	2,  // 9: bus.authz.v1.AdminService.ListRoles:input_type -> bus.authz.v1.ListRolesRequest
-	4,  // 10: bus.authz.v1.AdminService.GetRole:input_type -> bus.authz.v1.GetRoleRequest
-	5,  // 11: bus.authz.v1.AdminService.CreateRole:input_type -> bus.authz.v1.CreateRoleRequest
+	19, // 0: bus.authz.v1.ListPermissionsResponse.permissions:type_name -> bus.authz.v1.Permission
+	20, // 1: bus.authz.v1.ListRolesResponse.roles:type_name -> bus.authz.v1.Role
+	8,  // 2: bus.authz.v1.GetMeResponse.roles:type_name -> bus.authz.v1.MeRole
+	20, // 3: bus.authz.v1.GetRoleResponse.role:type_name -> bus.authz.v1.Role
+	20, // 4: bus.authz.v1.CreateRoleResponse.role:type_name -> bus.authz.v1.Role
+	20, // 5: bus.authz.v1.UpdateRoleResponse.role:type_name -> bus.authz.v1.Role
+	21, // 6: bus.authz.v1.ListUserRolesResponse.users:type_name -> bus.authz.v1.UserRoles
+	0,  // 7: bus.authz.v1.AdminService.ListPermissions:input_type -> bus.authz.v1.ListPermissionsRequest
+	2,  // 8: bus.authz.v1.AdminService.ListRoles:input_type -> bus.authz.v1.ListRolesRequest
+	4,  // 9: bus.authz.v1.AdminService.GetRole:input_type -> bus.authz.v1.GetRoleRequest
+	5,  // 10: bus.authz.v1.AdminService.CreateRole:input_type -> bus.authz.v1.CreateRoleRequest
+	7,  // 11: bus.authz.v1.AdminService.GetMe:input_type -> bus.authz.v1.GetMeRequest
 	6,  // 12: bus.authz.v1.AdminService.UpdateRole:input_type -> bus.authz.v1.UpdateRoleRequest
-	7,  // 13: bus.authz.v1.AdminService.DeleteRole:input_type -> bus.authz.v1.DeleteRoleRequest
-	8,  // 14: bus.authz.v1.AdminService.ListMembers:input_type -> bus.authz.v1.ListMembersRequest
-	10, // 15: bus.authz.v1.AdminService.SetMemberRoles:input_type -> bus.authz.v1.SetMemberRolesRequest
-	11, // 16: bus.authz.v1.AdminService.RemoveMember:input_type -> bus.authz.v1.RemoveMemberRequest
-	12, // 17: bus.authz.v1.AdminService.ListInvitations:input_type -> bus.authz.v1.ListInvitationsRequest
-	14, // 18: bus.authz.v1.AdminService.CreateInvitation:input_type -> bus.authz.v1.CreateInvitationRequest
-	1,  // 19: bus.authz.v1.AdminService.ListPermissions:output_type -> bus.authz.v1.ListPermissionsResponse
-	3,  // 20: bus.authz.v1.AdminService.ListRoles:output_type -> bus.authz.v1.ListRolesResponse
-	15, // 21: bus.authz.v1.AdminService.GetRole:output_type -> bus.authz.v1.GetRoleResponse
-	16, // 22: bus.authz.v1.AdminService.CreateRole:output_type -> bus.authz.v1.CreateRoleResponse
-	17, // 23: bus.authz.v1.AdminService.UpdateRole:output_type -> bus.authz.v1.UpdateRoleResponse
-	18, // 24: bus.authz.v1.AdminService.DeleteRole:output_type -> bus.authz.v1.DeleteRoleResponse
-	9,  // 25: bus.authz.v1.AdminService.ListMembers:output_type -> bus.authz.v1.ListMembersResponse
-	19, // 26: bus.authz.v1.AdminService.SetMemberRoles:output_type -> bus.authz.v1.SetMemberRolesResponse
-	20, // 27: bus.authz.v1.AdminService.RemoveMember:output_type -> bus.authz.v1.RemoveMemberResponse
-	13, // 28: bus.authz.v1.AdminService.ListInvitations:output_type -> bus.authz.v1.ListInvitationsResponse
-	21, // 29: bus.authz.v1.AdminService.CreateInvitation:output_type -> bus.authz.v1.CreateInvitationResponse
-	19, // [19:30] is the sub-list for method output_type
-	8,  // [8:19] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	10, // 13: bus.authz.v1.AdminService.DeleteRole:input_type -> bus.authz.v1.DeleteRoleRequest
+	11, // 14: bus.authz.v1.AdminService.SetMemberRoles:input_type -> bus.authz.v1.SetMemberRolesRequest
+	17, // 15: bus.authz.v1.AdminService.ListUserRoles:input_type -> bus.authz.v1.ListUserRolesRequest
+	1,  // 16: bus.authz.v1.AdminService.ListPermissions:output_type -> bus.authz.v1.ListPermissionsResponse
+	3,  // 17: bus.authz.v1.AdminService.ListRoles:output_type -> bus.authz.v1.ListRolesResponse
+	12, // 18: bus.authz.v1.AdminService.GetRole:output_type -> bus.authz.v1.GetRoleResponse
+	13, // 19: bus.authz.v1.AdminService.CreateRole:output_type -> bus.authz.v1.CreateRoleResponse
+	9,  // 20: bus.authz.v1.AdminService.GetMe:output_type -> bus.authz.v1.GetMeResponse
+	14, // 21: bus.authz.v1.AdminService.UpdateRole:output_type -> bus.authz.v1.UpdateRoleResponse
+	15, // 22: bus.authz.v1.AdminService.DeleteRole:output_type -> bus.authz.v1.DeleteRoleResponse
+	16, // 23: bus.authz.v1.AdminService.SetMemberRoles:output_type -> bus.authz.v1.SetMemberRolesResponse
+	18, // 24: bus.authz.v1.AdminService.ListUserRoles:output_type -> bus.authz.v1.ListUserRolesResponse
+	16, // [16:25] is the sub-list for method output_type
+	7,  // [7:16] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_bus_authz_v1_admin_proto_init() }
@@ -1131,7 +1044,7 @@ func file_bus_authz_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bus_authz_v1_admin_proto_rawDesc), len(file_bus_authz_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

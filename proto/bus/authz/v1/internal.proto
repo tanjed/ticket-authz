@@ -19,36 +19,53 @@ service InternalService {
       body: "*"
     };
   }
-  // A provider's company and roles, for the access token. NOT_FOUND: in no company.
-  // PERMISSION_DENIED: the company is suspended.
+  // A provider's company and roles, for the access token. The membership and company status come
+  // from Company. NOT_FOUND: in no company. PERMISSION_DENIED: the company is not active
+  // (suspended or pending_setup). UNAVAILABLE: Company cannot be reached.
   rpc GetClaims(GetClaimsRequest) returns (GetClaimsResponse) {
     option (google.api.http) = {get: "/internal/v1/subjects/{sub}/claims"};
   }
-  // Registers a company with its protected admin role held by admin_sub. Idempotent per subject:
-  // if admin_sub already belongs to a company, that company is returned (created = false).
-  rpc CreateCompany(CreateCompanyRequest) returns (CreateCompanyResponse) {
-    option (google.api.http) = {
-      post: "/internal/v1/companies"
-      body: "*"
-    };
-  }
+  // Publishes the company status (the status itself is Company's) to the gateway view (Redis).
   rpc SetCompanyStatus(SetCompanyStatusRequest) returns (SetCompanyStatusResponse) {
     option (google.api.http) = {
       put: "/internal/v1/companies/{company_id}/status"
       body: "*"
     };
   }
-  // For the IdP's invite page.
-  rpc GetInvitation(GetInvitationRequest) returns (GetInvitationResponse) {
-    option (google.api.http) = {get: "/internal/v1/invitations/{id}"};
-  }
-  // Makes sub a member with the invited roles. ALREADY_EXISTS: used already, or sub belongs to a
-  // company. FAILED_PRECONDITION: expired.
-  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse) {
+  // Creates the company's protected Admin role if it has none, makes user_id hold it, and
+  // publishes company active, role `*` and the user's version. Idempotent: an existing protected
+  // role is reused and the holding ensured. Called by Company on company creation.
+  rpc CreateAdminRole(CreateAdminRoleRequest) returns (CreateAdminRoleResponse) {
     option (google.api.http) = {
-      post: "/internal/v1/invitations/{id}/accept"
+      post: "/internal/v1/companies/{company_id}/admin"
       body: "*"
     };
+  }
+  // Adds these roles of the company to what the user holds (idempotent); role ids that no longer
+  // exist are skipped. A new version is published. Called by Company on invitation accept.
+  rpc AssignRoles(AssignRolesRequest) returns (AssignRolesResponse) {
+    option (google.api.http) = {
+      put: "/internal/v1/companies/{company_id}/users/{user_id}/roles"
+      body: "*"
+    };
+  }
+  // The escalation rule for an invitation: every role must belong to the company and the caller's
+  // own permissions (read fresh) must cover them. PERMISSION_DENIED (escalation) or NOT_FOUND.
+  rpc CheckAssignable(CheckAssignableRequest) returns (CheckAssignableResponse) {
+    option (google.api.http) = {
+      post: "/internal/v1/companies/{company_id}/assignable"
+      body: "*"
+    };
+  }
+  // removable = false with reason "last_admin" when the user is the only holder of the protected
+  // Admin role.
+  rpc CanRemoveUser(CanRemoveUserRequest) returns (CanRemoveUserResponse) {
+    option (google.api.http) = {get: "/internal/v1/companies/{company_id}/users/{user_id}/removable"};
+  }
+  // Deletes the user's role assignments and bumps their version, so their token is stale at once.
+  // Idempotent.
+  rpc RevokeUser(RevokeUserRequest) returns (RevokeUserResponse) {
+    option (google.api.http) = {delete: "/internal/v1/companies/{company_id}/users/{user_id}"};
   }
 }
 
@@ -63,9 +80,12 @@ message ManifestPermission {
 message ManifestRoute {
   // The APISIX route name (what the gateway looks up).
   string name = 1;
-  // One of the manifest's permissions; empty when public.
+  // One of the manifest's permissions; empty when public or authenticated.
   string permission = 2;
   bool public = 3;
+  // Any valid token (a provider's company active and token fresh, or a consumer) is enough; no
+  // permission is checked. Exactly one of permission, public and authenticated is set.
+  bool authenticated = 4;
 }
 
 message ApplyManifestRequest {
@@ -86,28 +106,9 @@ message GetClaimsRequest {
   string sub = 1;
 }
 
-message CreateCompanyRequest {
-  string name = 1;
-  string admin_sub = 2;
-}
-
-message CreateCompanyResponse {
-  string company_id = 1;
-  bool created = 2;
-}
-
 message SetCompanyStatusRequest {
   string company_id = 1;
   CompanyStatus status = 2;
-}
-
-message GetInvitationRequest {
-  string id = 1;
-}
-
-message AcceptInvitationRequest {
-  string id = 1;
-  string sub = 2;
 }
 
 message GetClaimsResponse {
@@ -120,8 +121,44 @@ message GetClaimsResponse {
 
 message SetCompanyStatusResponse {}
 
-message GetInvitationResponse {
-  Invitation invitation = 1;
+message CreateAdminRoleRequest {
+  string company_id = 1;
+  string user_id = 2;
 }
 
-message AcceptInvitationResponse {}
+message CreateAdminRoleResponse {
+  string role_id = 1;
+}
+
+message AssignRolesRequest {
+  string company_id = 1;
+  string user_id = 2;
+  repeated string role_ids = 3;
+}
+
+message AssignRolesResponse {}
+
+message CheckAssignableRequest {
+  string company_id = 1;
+  string caller_user_id = 2;
+  repeated string role_ids = 3;
+}
+
+message CheckAssignableResponse {}
+
+message CanRemoveUserRequest {
+  string company_id = 1;
+  string user_id = 2;
+}
+
+message CanRemoveUserResponse {
+  bool removable = 1;
+  string reason = 2;
+}
+
+message RevokeUserRequest {
+  string company_id = 1;
+  string user_id = 2;
+}
+
+message RevokeUserResponse {}

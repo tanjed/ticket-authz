@@ -41,12 +41,12 @@ func newUoW(t *testing.T) *uow.UnitOfWork {
 func companies(t *testing.T) int {
 	t.Helper()
 	var n int
-	require.NoError(t, pool.QueryRow(context.Background(), `SELECT count(*) FROM companies`).Scan(&n))
+	require.NoError(t, pool.QueryRow(context.Background(), `SELECT count(*) FROM user_versions`).Scan(&n))
 	return n
 }
 
 func insert(ctx context.Context, u *uow.UnitOfWork, name string) error {
-	_, err := u.Q(ctx).Exec(ctx, `INSERT INTO companies (id, name) VALUES (gen_random_uuid(), $1)`, name)
+	_, err := u.Q(ctx).Exec(ctx, `INSERT INTO user_versions (user_id, company_id, authz_version) VALUES ($1, gen_random_uuid(), 1)`, name)
 	return err
 }
 

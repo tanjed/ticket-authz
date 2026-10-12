@@ -19,7 +19,7 @@ The gateway decides every request from Redis instead of OPA bundles. Authz write
 
 | Key | Type | Content |
 |---|---|---|
-| `authz:routes` | HASH | APISIX route name → permission key, or `public`. Unknown and deprecated routes (or routes whose permission is deprecated) are absent: denied. |
+| `authz:routes` | HASH | APISIX route name → permission key, `public` (no token needed), or `authenticated` (any valid token: a provider's company active and token fresh, or a consumer; no permission is checked). Unknown and deprecated routes (or routes whose permission is deprecated) are absent: denied. |
 | `authz:consumer` | SET | consumer permission keys (live only) |
 | `authz:company:<cid>` | HASH | `status` = `active` / `suspended` |
 | `authz:company:<cid>:role:<rid>` | HASH | live permission → `1`; a `grants_all` role holds `*`. Absent when the role has no permission. |
@@ -40,10 +40,11 @@ A key is always replaced whole (`DEL` then write, in one `MULTI`), so a reader n
 ```
 perm = HGET authz:routes <route name>          absent: 403 unknown route; "public": allow
 verify the JWT (JWKS, issuer, audience)        fail: 401
-consumer: SISMEMBER authz:consumer perm        allow, else 403
+consumer: "authenticated": allow; else SISMEMBER authz:consumer perm: allow, else 403
 provider:
   GET authz:user:<sub>:version != jwt.authz_version, or absent: 401 token_stale
   HGET authz:company:<cid> status != active:   403
+  "authenticated": allow (no role lookup)
   any jwt role: HEXISTS authz:company:<cid>:role:<rid> perm, or "*": allow, else 403
 ```
 

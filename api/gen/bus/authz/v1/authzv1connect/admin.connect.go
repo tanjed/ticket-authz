@@ -42,25 +42,18 @@ const (
 	AdminServiceGetRoleProcedure = "/bus.authz.v1.AdminService/GetRole"
 	// AdminServiceCreateRoleProcedure is the fully-qualified name of the AdminService's CreateRole RPC.
 	AdminServiceCreateRoleProcedure = "/bus.authz.v1.AdminService/CreateRole"
+	// AdminServiceGetMeProcedure is the fully-qualified name of the AdminService's GetMe RPC.
+	AdminServiceGetMeProcedure = "/bus.authz.v1.AdminService/GetMe"
 	// AdminServiceUpdateRoleProcedure is the fully-qualified name of the AdminService's UpdateRole RPC.
 	AdminServiceUpdateRoleProcedure = "/bus.authz.v1.AdminService/UpdateRole"
 	// AdminServiceDeleteRoleProcedure is the fully-qualified name of the AdminService's DeleteRole RPC.
 	AdminServiceDeleteRoleProcedure = "/bus.authz.v1.AdminService/DeleteRole"
-	// AdminServiceListMembersProcedure is the fully-qualified name of the AdminService's ListMembers
-	// RPC.
-	AdminServiceListMembersProcedure = "/bus.authz.v1.AdminService/ListMembers"
 	// AdminServiceSetMemberRolesProcedure is the fully-qualified name of the AdminService's
 	// SetMemberRoles RPC.
 	AdminServiceSetMemberRolesProcedure = "/bus.authz.v1.AdminService/SetMemberRoles"
-	// AdminServiceRemoveMemberProcedure is the fully-qualified name of the AdminService's RemoveMember
-	// RPC.
-	AdminServiceRemoveMemberProcedure = "/bus.authz.v1.AdminService/RemoveMember"
-	// AdminServiceListInvitationsProcedure is the fully-qualified name of the AdminService's
-	// ListInvitations RPC.
-	AdminServiceListInvitationsProcedure = "/bus.authz.v1.AdminService/ListInvitations"
-	// AdminServiceCreateInvitationProcedure is the fully-qualified name of the AdminService's
-	// CreateInvitation RPC.
-	AdminServiceCreateInvitationProcedure = "/bus.authz.v1.AdminService/CreateInvitation"
+	// AdminServiceListUserRolesProcedure is the fully-qualified name of the AdminService's
+	// ListUserRoles RPC.
+	AdminServiceListUserRolesProcedure = "/bus.authz.v1.AdminService/ListUserRoles"
 )
 
 // AdminServiceClient is a client for the bus.authz.v1.AdminService service.
@@ -70,18 +63,19 @@ type AdminServiceClient interface {
 	ListRoles(context.Context, *v1.ListRolesRequest) (*v1.ListRolesResponse, error)
 	GetRole(context.Context, *v1.GetRoleRequest) (*v1.GetRoleResponse, error)
 	CreateRole(context.Context, *v1.CreateRoleRequest) (*v1.CreateRoleResponse, error)
-	// Replaces the name and permissions. The protected role cannot be changed.
+	// The caller's own access, read fresh from the database: for the provider UI's shell.
+	GetMe(context.Context, *v1.GetMeRequest) (*v1.GetMeResponse, error)
+	// Replaces the name, permissions and landing path. The protected role can change its landing
+	// path only.
 	UpdateRole(context.Context, *v1.UpdateRoleRequest) (*v1.UpdateRoleResponse, error)
 	// Refused while the role is assigned, and for the protected role.
 	DeleteRole(context.Context, *v1.DeleteRoleRequest) (*v1.DeleteRoleResponse, error)
-	ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error)
-	// Replaces the member's roles. The company's last admin cannot lose the admin role.
+	// Replaces the roles of a user of the caller's company (Company confirms the membership). The
+	// company's last admin cannot lose the admin role.
 	SetMemberRoles(context.Context, *v1.SetMemberRolesRequest) (*v1.SetMemberRolesResponse, error)
-	RemoveMember(context.Context, *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error)
-	ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error)
-	// Invites a phone number with roles; the IdP sends the link. Replaces a pending invitation for
-	// the same number. Someone who already belongs to a company cannot be invited.
-	CreateInvitation(context.Context, *v1.CreateInvitationRequest) (*v1.CreateInvitationResponse, error)
+	// Every user of the caller's company holding roles, with their role ids. The provider UI joins
+	// it with Company's ListUsers.
+	ListUserRoles(context.Context, *v1.ListUserRolesRequest) (*v1.ListUserRolesResponse, error)
 }
 
 // NewAdminServiceClient constructs a client for the bus.authz.v1.AdminService service. By default,
@@ -119,6 +113,12 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("CreateRole")),
 			connect.WithClientOptions(opts...),
 		),
+		getMe: connect.NewClient[v1.GetMeRequest, v1.GetMeResponse](
+			httpClient,
+			baseURL+AdminServiceGetMeProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("GetMe")),
+			connect.WithClientOptions(opts...),
+		),
 		updateRole: connect.NewClient[v1.UpdateRoleRequest, v1.UpdateRoleResponse](
 			httpClient,
 			baseURL+AdminServiceUpdateRoleProcedure,
@@ -131,34 +131,16 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("DeleteRole")),
 			connect.WithClientOptions(opts...),
 		),
-		listMembers: connect.NewClient[v1.ListMembersRequest, v1.ListMembersResponse](
-			httpClient,
-			baseURL+AdminServiceListMembersProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("ListMembers")),
-			connect.WithClientOptions(opts...),
-		),
 		setMemberRoles: connect.NewClient[v1.SetMemberRolesRequest, v1.SetMemberRolesResponse](
 			httpClient,
 			baseURL+AdminServiceSetMemberRolesProcedure,
 			connect.WithSchema(adminServiceMethods.ByName("SetMemberRoles")),
 			connect.WithClientOptions(opts...),
 		),
-		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
+		listUserRoles: connect.NewClient[v1.ListUserRolesRequest, v1.ListUserRolesResponse](
 			httpClient,
-			baseURL+AdminServiceRemoveMemberProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("RemoveMember")),
-			connect.WithClientOptions(opts...),
-		),
-		listInvitations: connect.NewClient[v1.ListInvitationsRequest, v1.ListInvitationsResponse](
-			httpClient,
-			baseURL+AdminServiceListInvitationsProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("ListInvitations")),
-			connect.WithClientOptions(opts...),
-		),
-		createInvitation: connect.NewClient[v1.CreateInvitationRequest, v1.CreateInvitationResponse](
-			httpClient,
-			baseURL+AdminServiceCreateInvitationProcedure,
-			connect.WithSchema(adminServiceMethods.ByName("CreateInvitation")),
+			baseURL+AdminServiceListUserRolesProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("ListUserRoles")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -166,17 +148,15 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // adminServiceClient implements AdminServiceClient.
 type adminServiceClient struct {
-	listPermissions  *connect.Client[v1.ListPermissionsRequest, v1.ListPermissionsResponse]
-	listRoles        *connect.Client[v1.ListRolesRequest, v1.ListRolesResponse]
-	getRole          *connect.Client[v1.GetRoleRequest, v1.GetRoleResponse]
-	createRole       *connect.Client[v1.CreateRoleRequest, v1.CreateRoleResponse]
-	updateRole       *connect.Client[v1.UpdateRoleRequest, v1.UpdateRoleResponse]
-	deleteRole       *connect.Client[v1.DeleteRoleRequest, v1.DeleteRoleResponse]
-	listMembers      *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
-	setMemberRoles   *connect.Client[v1.SetMemberRolesRequest, v1.SetMemberRolesResponse]
-	removeMember     *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
-	listInvitations  *connect.Client[v1.ListInvitationsRequest, v1.ListInvitationsResponse]
-	createInvitation *connect.Client[v1.CreateInvitationRequest, v1.CreateInvitationResponse]
+	listPermissions *connect.Client[v1.ListPermissionsRequest, v1.ListPermissionsResponse]
+	listRoles       *connect.Client[v1.ListRolesRequest, v1.ListRolesResponse]
+	getRole         *connect.Client[v1.GetRoleRequest, v1.GetRoleResponse]
+	createRole      *connect.Client[v1.CreateRoleRequest, v1.CreateRoleResponse]
+	getMe           *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
+	updateRole      *connect.Client[v1.UpdateRoleRequest, v1.UpdateRoleResponse]
+	deleteRole      *connect.Client[v1.DeleteRoleRequest, v1.DeleteRoleResponse]
+	setMemberRoles  *connect.Client[v1.SetMemberRolesRequest, v1.SetMemberRolesResponse]
+	listUserRoles   *connect.Client[v1.ListUserRolesRequest, v1.ListUserRolesResponse]
 }
 
 // ListPermissions calls bus.authz.v1.AdminService.ListPermissions.
@@ -215,6 +195,15 @@ func (c *adminServiceClient) CreateRole(ctx context.Context, req *v1.CreateRoleR
 	return nil, err
 }
 
+// GetMe calls bus.authz.v1.AdminService.GetMe.
+func (c *adminServiceClient) GetMe(ctx context.Context, req *v1.GetMeRequest) (*v1.GetMeResponse, error) {
+	response, err := c.getMe.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // UpdateRole calls bus.authz.v1.AdminService.UpdateRole.
 func (c *adminServiceClient) UpdateRole(ctx context.Context, req *v1.UpdateRoleRequest) (*v1.UpdateRoleResponse, error) {
 	response, err := c.updateRole.CallUnary(ctx, connect.NewRequest(req))
@@ -233,15 +222,6 @@ func (c *adminServiceClient) DeleteRole(ctx context.Context, req *v1.DeleteRoleR
 	return nil, err
 }
 
-// ListMembers calls bus.authz.v1.AdminService.ListMembers.
-func (c *adminServiceClient) ListMembers(ctx context.Context, req *v1.ListMembersRequest) (*v1.ListMembersResponse, error) {
-	response, err := c.listMembers.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
 // SetMemberRoles calls bus.authz.v1.AdminService.SetMemberRoles.
 func (c *adminServiceClient) SetMemberRoles(ctx context.Context, req *v1.SetMemberRolesRequest) (*v1.SetMemberRolesResponse, error) {
 	response, err := c.setMemberRoles.CallUnary(ctx, connect.NewRequest(req))
@@ -251,27 +231,9 @@ func (c *adminServiceClient) SetMemberRoles(ctx context.Context, req *v1.SetMemb
 	return nil, err
 }
 
-// RemoveMember calls bus.authz.v1.AdminService.RemoveMember.
-func (c *adminServiceClient) RemoveMember(ctx context.Context, req *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error) {
-	response, err := c.removeMember.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
-// ListInvitations calls bus.authz.v1.AdminService.ListInvitations.
-func (c *adminServiceClient) ListInvitations(ctx context.Context, req *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error) {
-	response, err := c.listInvitations.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
-}
-
-// CreateInvitation calls bus.authz.v1.AdminService.CreateInvitation.
-func (c *adminServiceClient) CreateInvitation(ctx context.Context, req *v1.CreateInvitationRequest) (*v1.CreateInvitationResponse, error) {
-	response, err := c.createInvitation.CallUnary(ctx, connect.NewRequest(req))
+// ListUserRoles calls bus.authz.v1.AdminService.ListUserRoles.
+func (c *adminServiceClient) ListUserRoles(ctx context.Context, req *v1.ListUserRolesRequest) (*v1.ListUserRolesResponse, error) {
+	response, err := c.listUserRoles.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -285,18 +247,19 @@ type AdminServiceHandler interface {
 	ListRoles(context.Context, *v1.ListRolesRequest) (*v1.ListRolesResponse, error)
 	GetRole(context.Context, *v1.GetRoleRequest) (*v1.GetRoleResponse, error)
 	CreateRole(context.Context, *v1.CreateRoleRequest) (*v1.CreateRoleResponse, error)
-	// Replaces the name and permissions. The protected role cannot be changed.
+	// The caller's own access, read fresh from the database: for the provider UI's shell.
+	GetMe(context.Context, *v1.GetMeRequest) (*v1.GetMeResponse, error)
+	// Replaces the name, permissions and landing path. The protected role can change its landing
+	// path only.
 	UpdateRole(context.Context, *v1.UpdateRoleRequest) (*v1.UpdateRoleResponse, error)
 	// Refused while the role is assigned, and for the protected role.
 	DeleteRole(context.Context, *v1.DeleteRoleRequest) (*v1.DeleteRoleResponse, error)
-	ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error)
-	// Replaces the member's roles. The company's last admin cannot lose the admin role.
+	// Replaces the roles of a user of the caller's company (Company confirms the membership). The
+	// company's last admin cannot lose the admin role.
 	SetMemberRoles(context.Context, *v1.SetMemberRolesRequest) (*v1.SetMemberRolesResponse, error)
-	RemoveMember(context.Context, *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error)
-	ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error)
-	// Invites a phone number with roles; the IdP sends the link. Replaces a pending invitation for
-	// the same number. Someone who already belongs to a company cannot be invited.
-	CreateInvitation(context.Context, *v1.CreateInvitationRequest) (*v1.CreateInvitationResponse, error)
+	// Every user of the caller's company holding roles, with their role ids. The provider UI joins
+	// it with Company's ListUsers.
+	ListUserRoles(context.Context, *v1.ListUserRolesRequest) (*v1.ListUserRolesResponse, error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -330,6 +293,12 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("CreateRole")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceGetMeHandler := connect.NewUnaryHandlerSimple(
+		AdminServiceGetMeProcedure,
+		svc.GetMe,
+		connect.WithSchema(adminServiceMethods.ByName("GetMe")),
+		connect.WithHandlerOptions(opts...),
+	)
 	adminServiceUpdateRoleHandler := connect.NewUnaryHandlerSimple(
 		AdminServiceUpdateRoleProcedure,
 		svc.UpdateRole,
@@ -342,34 +311,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("DeleteRole")),
 		connect.WithHandlerOptions(opts...),
 	)
-	adminServiceListMembersHandler := connect.NewUnaryHandlerSimple(
-		AdminServiceListMembersProcedure,
-		svc.ListMembers,
-		connect.WithSchema(adminServiceMethods.ByName("ListMembers")),
-		connect.WithHandlerOptions(opts...),
-	)
 	adminServiceSetMemberRolesHandler := connect.NewUnaryHandlerSimple(
 		AdminServiceSetMemberRolesProcedure,
 		svc.SetMemberRoles,
 		connect.WithSchema(adminServiceMethods.ByName("SetMemberRoles")),
 		connect.WithHandlerOptions(opts...),
 	)
-	adminServiceRemoveMemberHandler := connect.NewUnaryHandlerSimple(
-		AdminServiceRemoveMemberProcedure,
-		svc.RemoveMember,
-		connect.WithSchema(adminServiceMethods.ByName("RemoveMember")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceListInvitationsHandler := connect.NewUnaryHandlerSimple(
-		AdminServiceListInvitationsProcedure,
-		svc.ListInvitations,
-		connect.WithSchema(adminServiceMethods.ByName("ListInvitations")),
-		connect.WithHandlerOptions(opts...),
-	)
-	adminServiceCreateInvitationHandler := connect.NewUnaryHandlerSimple(
-		AdminServiceCreateInvitationProcedure,
-		svc.CreateInvitation,
-		connect.WithSchema(adminServiceMethods.ByName("CreateInvitation")),
+	adminServiceListUserRolesHandler := connect.NewUnaryHandlerSimple(
+		AdminServiceListUserRolesProcedure,
+		svc.ListUserRoles,
+		connect.WithSchema(adminServiceMethods.ByName("ListUserRoles")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/bus.authz.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -382,20 +333,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetRoleHandler.ServeHTTP(w, r)
 		case AdminServiceCreateRoleProcedure:
 			adminServiceCreateRoleHandler.ServeHTTP(w, r)
+		case AdminServiceGetMeProcedure:
+			adminServiceGetMeHandler.ServeHTTP(w, r)
 		case AdminServiceUpdateRoleProcedure:
 			adminServiceUpdateRoleHandler.ServeHTTP(w, r)
 		case AdminServiceDeleteRoleProcedure:
 			adminServiceDeleteRoleHandler.ServeHTTP(w, r)
-		case AdminServiceListMembersProcedure:
-			adminServiceListMembersHandler.ServeHTTP(w, r)
 		case AdminServiceSetMemberRolesProcedure:
 			adminServiceSetMemberRolesHandler.ServeHTTP(w, r)
-		case AdminServiceRemoveMemberProcedure:
-			adminServiceRemoveMemberHandler.ServeHTTP(w, r)
-		case AdminServiceListInvitationsProcedure:
-			adminServiceListInvitationsHandler.ServeHTTP(w, r)
-		case AdminServiceCreateInvitationProcedure:
-			adminServiceCreateInvitationHandler.ServeHTTP(w, r)
+		case AdminServiceListUserRolesProcedure:
+			adminServiceListUserRolesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -421,6 +368,10 @@ func (UnimplementedAdminServiceHandler) CreateRole(context.Context, *v1.CreateRo
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.CreateRole is not implemented"))
 }
 
+func (UnimplementedAdminServiceHandler) GetMe(context.Context, *v1.GetMeRequest) (*v1.GetMeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.GetMe is not implemented"))
+}
+
 func (UnimplementedAdminServiceHandler) UpdateRole(context.Context, *v1.UpdateRoleRequest) (*v1.UpdateRoleResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.UpdateRole is not implemented"))
 }
@@ -429,22 +380,10 @@ func (UnimplementedAdminServiceHandler) DeleteRole(context.Context, *v1.DeleteRo
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.DeleteRole is not implemented"))
 }
 
-func (UnimplementedAdminServiceHandler) ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.ListMembers is not implemented"))
-}
-
 func (UnimplementedAdminServiceHandler) SetMemberRoles(context.Context, *v1.SetMemberRolesRequest) (*v1.SetMemberRolesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.SetMemberRoles is not implemented"))
 }
 
-func (UnimplementedAdminServiceHandler) RemoveMember(context.Context, *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.RemoveMember is not implemented"))
-}
-
-func (UnimplementedAdminServiceHandler) ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.ListInvitations is not implemented"))
-}
-
-func (UnimplementedAdminServiceHandler) CreateInvitation(context.Context, *v1.CreateInvitationRequest) (*v1.CreateInvitationResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.CreateInvitation is not implemented"))
+func (UnimplementedAdminServiceHandler) ListUserRoles(context.Context, *v1.ListUserRolesRequest) (*v1.ListUserRolesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("bus.authz.v1.AdminService.ListUserRoles is not implemented"))
 }

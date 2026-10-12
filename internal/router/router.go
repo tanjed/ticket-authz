@@ -76,7 +76,7 @@ func handler(services []Service) (http.Handler, error) {
 	for _, s := range services {
 		vs = append(vs, vanguard.NewService(s.Path, s.Handler))
 	}
-	tc, err := vanguard.NewTranscoder(vs)
+	tc, err := newTranscoder(vs...)
 	if err != nil {
 		return nil, err
 	}

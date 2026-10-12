@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package bus.company.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/tanjed/bus2/authz/api/gen/bus/company/v1;companyv1";
+
+// Vendored subset of Company's internal.proto (../Company/proto/bus/company/v1): only what Authz
+// calls, GetMembership and ListCompanyStatuses, with the CompanyStatus enum of types.proto. Package
+// and service name are unchanged so the wire paths match. Keep it in step with Company's.
+
+enum CompanyStatus {
+  COMPANY_STATUS_UNSPECIFIED = 0;
+  COMPANY_STATUS_PENDING_SETUP = 1;
+  COMPANY_STATUS_ACTIVE = 2;
+  COMPANY_STATUS_SUSPENDED = 3;
+}
+
+service InternalService {
+  rpc GetMembership(GetMembershipRequest) returns (GetMembershipResponse) {
+    option (google.api.http) = {get: "/internal/v1/users/{user_id}/membership"};
+  }
+  rpc ListCompanyStatuses(ListCompanyStatusesRequest) returns (ListCompanyStatusesResponse) {
+    option (google.api.http) = {get: "/internal/v1/company-statuses"};
+  }
+}
+
+message GetMembershipRequest {
+  string user_id = 1;
+}
+
+message GetMembershipResponse {
+  string company_id = 1;
+  CompanyStatus status = 2;
+}
+
+message ListCompanyStatusesRequest {}
+
+message CompanyStatusEntry {
+  string company_id = 1;
+  CompanyStatus status = 2;
+}
+
+message ListCompanyStatusesResponse {
+  repeated CompanyStatusEntry companies = 1;
+}

@@ -12,8 +12,8 @@ import (
 	"github.com/tanjed/bus2/authz/internal/db/uow"
 	"github.com/tanjed/bus2/authz/internal/events"
 	catalogrepo "github.com/tanjed/bus2/authz/internal/repository/catalogue"
-	memberrepo "github.com/tanjed/bus2/authz/internal/repository/member"
 	rolerepo "github.com/tanjed/bus2/authz/internal/repository/role"
+	userrepo "github.com/tanjed/bus2/authz/internal/repository/userrole"
 	"github.com/tanjed/bus2/authz/internal/service/access"
 )
 
@@ -23,19 +23,19 @@ type Service struct {
 	cache     cache.Publisher
 	events    events.Publisher
 	roles     rolerepo.Repo
-	members   memberrepo.Repo
+	users     userrepo.Repo
 	catalogue catalogrepo.Repo
 }
 
 func (s *Service) List(ctx context.Context, c access.Caller) ([]Role, error) {
-	if _, err := access.CallerPower(ctx, s.members, c); err != nil {
+	if _, err := access.CallerPower(ctx, s.users, c); err != nil {
 		return nil, err
 	}
 	return s.roles.List(ctx, c.CompanyID)
 }
 
 func (s *Service) Get(ctx context.Context, c access.Caller, id string) (Role, error) {
-	if _, err := access.CallerPower(ctx, s.members, c); err != nil {
+	if _, err := access.CallerPower(ctx, s.users, c); err != nil {
 		return Role{}, err
 	}
 	found, err := s.roles.Find(ctx, c.CompanyID, []string{id})
@@ -53,7 +53,7 @@ func (s *Service) Create(ctx context.Context, c access.Caller, in Input) (Role, 
 	id := uuid.NewString()
 	var view []cache.RoleView
 	err := s.uow.UnitOfWork(ctx, uow.Timeout, func(ctx context.Context) error {
-		p, err := access.CallerPower(ctx, s.members, c)
+		p, err := access.CallerPower(ctx, s.users, c)
 		if err != nil {
 			return err
 		}
@@ -63,7 +63,7 @@ func (s *Service) Create(ctx context.Context, c access.Caller, in Input) (Role, 
 		if !p.Covers(Role{Permissions: in.Permissions}) {
 			return apperror.Escalation()
 		}
-		if err := s.roles.Create(ctx, c.CompanyID, Role{ID: id, Name: in.Name}); err != nil {
+		if err := s.roles.Create(ctx, c.CompanyID, Role{ID: id, Name: in.Name, LandingPath: in.LandingPath}); err != nil {
 			return nameTaken(err)
 		}
 		if err := s.roles.SetPermissions(ctx, id, in.Permissions); err != nil {
@@ -79,15 +79,16 @@ func (s *Service) Create(ctx context.Context, c access.Caller, in Input) (Role, 
 		return Role{}, err
 	}
 	s.events.Publish(ctx, events.RoleCreated, c.CompanyID, map[string]any{
-		"company_id": c.CompanyID, "role_id": id, "name": in.Name, "permissions": in.Permissions, "by": c.Sub,
+		"company_id": c.CompanyID, "role_id": id, "name": in.Name, "permissions": in.Permissions, "by": c.UserID,
 	})
 	return s.Get(ctx, c, id)
 }
 
 func (s *Service) Update(ctx context.Context, c access.Caller, id string, in Input) (Role, error) {
 	var view []cache.RoleView
+	landingOnly := false
 	err := s.uow.UnitOfWork(ctx, uow.Timeout, func(ctx context.Context) error {
-		p, err := access.CallerPower(ctx, s.members, c)
+		p, err := access.CallerPower(ctx, s.users, c)
 		if err != nil {
 			return err
 		}
@@ -95,17 +96,32 @@ func (s *Service) Update(ctx context.Context, c access.Caller, id string, in Inp
 		if err != nil {
 			return err
 		}
-		if old.Protected {
-			return apperror.Fail(apperror.KindPrecondition, "protected_role", "the %s role cannot be changed", old.Name)
-		}
-		if in, err = liveInput(ctx, s.catalogue, in); err != nil {
+		// Validate first, so a bad landing path is reported whatever else is wrong.
+		if in, err = normalized(in); err != nil {
 			return err
 		}
-		if !p.Covers(old) || !p.Covers(Role{Permissions: in.Permissions}) {
+		unchanged := in.Name == old.Name && slices.Equal(in.Permissions, old.Permissions)
+		if old.Protected && !unchanged {
+			return apperror.Fail(apperror.KindPrecondition, "protected_role", "the %s role cannot be changed, only its landing path", old.Name)
+		}
+		if !unchanged {
+			if in, err = liveInput(ctx, s.catalogue, in); err != nil {
+				return err
+			}
+		}
+		if !p.Covers(old) || (!unchanged && !p.Covers(Role{Permissions: in.Permissions})) {
 			return apperror.Escalation()
+		}
+		if unchanged {
+			// Landing path only: not in the gateway view, so no version bump and no publish.
+			landingOnly = true
+			return s.roles.SetLandingPath(ctx, id, in.LandingPath)
 		}
 		if err := s.roles.Rename(ctx, id, in.Name); err != nil {
 			return nameTaken(err)
+		}
+		if err := s.roles.SetLandingPath(ctx, id, in.LandingPath); err != nil {
+			return err
 		}
 		if err := s.roles.SetPermissions(ctx, id, in.Permissions); err != nil {
 			return err
@@ -113,21 +129,22 @@ func (s *Service) Update(ctx context.Context, c access.Caller, id string, in Inp
 		view, err = s.roles.View(ctx, id)
 		return err
 	})
-	if err == nil {
-		s.publishRole(ctx, c.CompanyID, id, view)
-	}
 	if err != nil {
 		return Role{}, err
 	}
+	if landingOnly {
+		return s.Get(ctx, c, id)
+	}
+	s.publishRole(ctx, c.CompanyID, id, view)
 	s.events.Publish(ctx, events.RoleUpdated, c.CompanyID, map[string]any{
-		"company_id": c.CompanyID, "role_id": id, "name": in.Name, "permissions": in.Permissions, "by": c.Sub,
+		"company_id": c.CompanyID, "role_id": id, "name": in.Name, "permissions": in.Permissions, "by": c.UserID,
 	})
 	return s.Get(ctx, c, id)
 }
 
 func (s *Service) Delete(ctx context.Context, c access.Caller, id string) error {
 	err := s.uow.UnitOfWork(ctx, uow.Timeout, func(ctx context.Context) error {
-		p, err := access.CallerPower(ctx, s.members, c)
+		p, err := access.CallerPower(ctx, s.users, c)
 		if err != nil {
 			return err
 		}
@@ -156,7 +173,7 @@ func (s *Service) Delete(ctx context.Context, c access.Caller, id string) error 
 	if err != nil {
 		return err
 	}
-	s.events.Publish(ctx, events.RoleDeleted, c.CompanyID, map[string]any{"company_id": c.CompanyID, "role_id": id, "by": c.Sub})
+	s.events.Publish(ctx, events.RoleDeleted, c.CompanyID, map[string]any{"company_id": c.CompanyID, "role_id": id, "by": c.UserID})
 	return nil
 }
 

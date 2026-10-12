@@ -27,6 +27,9 @@ func (s *Service) ApplyManifest(ctx context.Context, service string, m catalogue
 		return Result{}, apperror.Fail(apperror.KindInvalid, "invalid_service", "invalid service name %q", service)
 	}
 	if err := m.Validate(); err != nil {
+		if errors.Is(err, catalogue.ErrRouteMode) {
+			return Result{}, apperror.Fail(apperror.KindInvalid, "invalid_route", "%s", err.Error())
+		}
 		return Result{}, apperror.Fail(apperror.KindInvalid, "invalid_manifest", "%s", err.Error())
 	}
 	keys, names := m.PermissionKeys(), m.RouteNames()

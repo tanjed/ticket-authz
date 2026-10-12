@@ -4,6 +4,7 @@ package catalogue
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -22,12 +23,18 @@ type Permission struct {
 	Consumer bool `json:"consumer"`
 }
 
-// Route maps an APISIX route name to the one permission it requires, or marks it public.
+// Route maps an APISIX route name to the one permission it requires, or marks it public or
+// authenticated. Exactly one of the three.
 type Route struct {
 	Name       string `json:"name"`
 	Permission string `json:"permission,omitempty"`
 	Public     bool   `json:"public,omitempty"`
+	// Authenticated: any valid token is enough (no permission is checked).
+	Authenticated bool `json:"authenticated,omitempty"`
 }
+
+// ErrRouteMode: a route must set exactly one of permission, public or authenticated.
+var ErrRouteMode = errors.New("set exactly one of permission, public or authenticated")
 
 var (
 	// resource:action, no API version.
@@ -74,12 +81,16 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("route %q: listed twice", r.Name)
 		}
 		names[r.Name] = true
+		modes := 0
+		for _, set := range []bool{r.Public, r.Authenticated, r.Permission != ""} {
+			if set {
+				modes++
+			}
+		}
 		switch {
-		case r.Public && r.Permission != "":
-			return fmt.Errorf("route %q: either public or a permission, not both", r.Name)
-		case !r.Public && r.Permission == "":
-			return fmt.Errorf("route %q: needs a permission or public: true", r.Name)
-		case !r.Public && !keys[r.Permission]:
+		case modes != 1:
+			return fmt.Errorf("route %q: %w", r.Name, ErrRouteMode)
+		case r.Permission != "" && !keys[r.Permission]:
 			return fmt.Errorf("route %q: permission %q is not in this manifest", r.Name, r.Permission)
 		}
 	}

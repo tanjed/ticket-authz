@@ -9,11 +9,9 @@
   (list "authz.roles.create" "POST" "/authz/v1/roles")
   (list "authz.roles.update" "PUT" "/authz/v1/roles/*")
   (list "authz.roles.delete" "DELETE" "/authz/v1/roles/*")
-  (list "authz.members.list" "GET" "/authz/v1/members")
+  (list "authz.users.roles" "GET" "/authz/v1/users/roles")
   (list "authz.members.roles" "PUT" "/authz/v1/members/*")
-  (list "authz.members.remove" "DELETE" "/authz/v1/members/*")
-  (list "authz.invitations.list" "GET" "/authz/v1/invitations")
-  (list "authz.invitations.create" "POST" "/authz/v1/invitations") }}
+  (list "authz.me" "GET" "/authz/v1/me") }}
 apiVersion: apisix.apache.org/v2
 kind: ApisixRoute
 metadata:

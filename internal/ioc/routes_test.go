@@ -18,9 +18,8 @@ import (
 	"github.com/tanjed/bus2/authz/internal/router"
 	"github.com/tanjed/bus2/authz/internal/service/catalogue"
 	"github.com/tanjed/bus2/authz/internal/service/company"
-	"github.com/tanjed/bus2/authz/internal/service/invitation"
-	"github.com/tanjed/bus2/authz/internal/service/member"
 	"github.com/tanjed/bus2/authz/internal/service/role"
+	"github.com/tanjed/bus2/authz/internal/service/user"
 )
 
 // The handler modules declare their services into the router's group, each on its own listener:
@@ -30,7 +29,7 @@ func TestRoutes_ModulesDeclareServices(t *testing.T) {
 	app := fx.New(fx.NopLogger,
 		healthhandler.Module, admin.Module, internalapi.Module, router.Module,
 		fx.Supply(slog.New(slog.NewTextHandler(io.Discard, nil)), config.Config{}),
-		fx.Supply(&catalogue.Service{}, &company.Service{}, &role.Service{}, &member.Service{}, &invitation.Service{}),
+		fx.Supply(&catalogue.Service{}, &company.Service{}, &role.Service{}, &user.Service{}),
 		fx.Provide(func() health.Checker { return health.New(nil) }),
 		fx.Populate(&routes),
 	)
@@ -58,6 +57,9 @@ func TestRoutes_ModulesDeclareServices(t *testing.T) {
 		{"/live", false, true},
 		{"/bus.authz.v1.AdminService/ListRoles", true, false},
 		{"/bus.authz.v1.InternalService/SetCompanyStatus", false, true},
+		{"/bus.authz.v1.InternalService/CreateAdminRole", false, true},
+		{"/bus.authz.v1.InternalService/RevokeUser", false, true},
+		{"/bus.authz.v1.AdminService/ListUserRoles", true, false},
 	} {
 		if got := served(public, c.path); got != c.public {
 			t.Errorf("public %s served = %v, want %v", c.path, got, c.public)

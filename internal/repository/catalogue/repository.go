@@ -73,15 +73,16 @@ func (r *Repository) UpsertPermission(ctx context.Context, svc string, p catalog
 
 func (r *Repository) UpsertRoute(ctx context.Context, svc string, rt catalogue.Route) (bool, error) {
 	var perm *string
-	if !rt.Public {
+	if rt.Permission != "" {
 		perm = &rt.Permission
 	}
 	tag, err := r.db.Q(ctx).Exec(ctx, `
-		INSERT INTO routes (name, service, permission_key, public) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (name) DO UPDATE SET permission_key = EXCLUDED.permission_key, public = EXCLUDED.public, deprecated_at = NULL
-		WHERE (routes.permission_key, routes.public, routes.deprecated_at)
-		      IS DISTINCT FROM (EXCLUDED.permission_key, EXCLUDED.public, NULL::timestamptz)`,
-		rt.Name, svc, perm, rt.Public)
+		INSERT INTO routes (name, service, permission_key, public, authenticated) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (name) DO UPDATE SET permission_key = EXCLUDED.permission_key, public = EXCLUDED.public,
+		  authenticated = EXCLUDED.authenticated, deprecated_at = NULL
+		WHERE (routes.permission_key, routes.public, routes.authenticated, routes.deprecated_at)
+		      IS DISTINCT FROM (EXCLUDED.permission_key, EXCLUDED.public, EXCLUDED.authenticated, NULL::timestamptz)`,
+		rt.Name, svc, perm, rt.Public, rt.Authenticated)
 	return tag.RowsAffected() > 0, err
 }
 
@@ -115,9 +116,11 @@ func (r *Repository) LiveKeys(ctx context.Context, keys []string) ([]string, err
 // denied.
 func (r *Repository) RoutesView(ctx context.Context) (map[string]string, error) {
 	rows, err := r.db.Q(ctx).Query(ctx, `
-		SELECT r.name, coalesce(r.permission_key, $1) FROM routes r
+		SELECT r.name, CASE WHEN r.public THEN $1 WHEN r.authenticated THEN $2 ELSE r.permission_key END
+		FROM routes r
 		LEFT JOIN permissions p ON p.key = r.permission_key
-		WHERE r.deprecated_at IS NULL AND (r.public OR p.deprecated_at IS NULL)`, cache.RoutePublic)
+		WHERE r.deprecated_at IS NULL AND (r.public OR r.authenticated OR p.deprecated_at IS NULL)`,
+		cache.RoutePublic, cache.RouteAuthenticated)
 	if err != nil {
 		return nil, err
 	}

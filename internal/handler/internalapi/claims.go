@@ -20,14 +20,6 @@ func (s *Internal) GetClaims(ctx context.Context, req *authzv1.GetClaimsRequest)
 	return out, nil
 }
 
-func (s *Internal) CreateCompany(ctx context.Context, req *authzv1.CreateCompanyRequest) (*authzv1.CreateCompanyResponse, error) {
-	id, created, err := s.Companies.Create(ctx, req.GetName(), req.GetAdminSub())
-	if err != nil {
-		return nil, err
-	}
-	return &authzv1.CreateCompanyResponse{CompanyId: id, Created: created}, nil
-}
-
 func (s *Internal) SetCompanyStatus(ctx context.Context, req *authzv1.SetCompanyStatusRequest) (*authzv1.SetCompanyStatusResponse, error) {
 	var st string
 	switch req.GetStatus() {

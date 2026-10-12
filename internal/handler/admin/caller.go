@@ -31,5 +31,5 @@ func callerFrom(ctx context.Context) (access.Caller, error) {
 	if get(MDUserType) != "provider" {
 		return access.Caller{}, apperror.Fail(apperror.KindForbidden, "provider_only", "only company users can manage roles")
 	}
-	return access.Caller{Sub: get(MDSubject), CompanyID: get(MDCompany)}, nil
+	return access.Caller{UserID: get(MDSubject), CompanyID: get(MDCompany)}, nil
 }
